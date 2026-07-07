@@ -56,7 +56,8 @@ func (r *ChatRepo) ListConversations(ctx context.Context, orgID domain.OrgID, li
 	for _, row := range rows {
 		last, _ := row.LastMessage.(string) // COALESCE'd text
 		out = append(out, domain.Conversation{
-			ID: row.ID, Status: row.Status, LastMessage: last, MessageCount: int(row.MessageCount),
+			ID: row.ID, Channel: row.Channel, ExternalUser: deref(row.ExternalUser),
+			Status: row.Status, LastMessage: last, MessageCount: int(row.MessageCount),
 			CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 		})
 	}

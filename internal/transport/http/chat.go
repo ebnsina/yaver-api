@@ -18,6 +18,8 @@ type chatHandler struct {
 
 type conversationDTO struct {
 	ID           string `json:"id"`
+	Channel      string `json:"channel"`
+	Customer     string `json:"customer"`
 	Status       string `json:"status"`
 	LastMessage  string `json:"last_message"`
 	MessageCount int    `json:"message_count"`
@@ -61,9 +63,13 @@ func (h *chatHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]conversationDTO, 0, len(list))
 	for _, c := range list {
+		customer := c.ExternalUser
+		if customer == "" {
+			customer = "Website visitor"
+		}
 		out = append(out, conversationDTO{
-			ID: c.ID, Status: c.Status, LastMessage: c.LastMessage,
-			MessageCount: c.MessageCount, UpdatedAt: c.UpdatedAt.Format(time.RFC3339),
+			ID: c.ID, Channel: c.Channel, Customer: customer, Status: c.Status,
+			LastMessage: c.LastMessage, MessageCount: c.MessageCount, UpdatedAt: c.UpdatedAt.Format(time.RFC3339),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"conversations": out})

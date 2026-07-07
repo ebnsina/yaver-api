@@ -8,7 +8,8 @@ import (
 // Conversation is a chat thread between a customer and the assistant.
 type Conversation struct {
 	ID           string
-	Channel      string
+	Channel      string // chat | whatsapp | messenger
+	ExternalUser string // channel-side user id (empty for the web widget)
 	Status       string // open | closed
 	LastMessage  string
 	MessageCount int

@@ -114,7 +114,7 @@ func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) er
 }
 
 const listConversationsByOrg = `-- name: ListConversationsByOrg :many
-SELECT c.id, c.status, c.created_at, c.updated_at,
+SELECT c.id, c.channel, c.external_user, c.status, c.created_at, c.updated_at,
        COALESCE((SELECT content FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1), '') AS last_message,
        (SELECT count(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
 FROM conversations c WHERE c.org_id = $1 ORDER BY c.updated_at DESC LIMIT $2
@@ -127,6 +127,8 @@ type ListConversationsByOrgParams struct {
 
 type ListConversationsByOrgRow struct {
 	ID           string
+	Channel      string
+	ExternalUser *string
 	Status       string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
@@ -145,6 +147,8 @@ func (q *Queries) ListConversationsByOrg(ctx context.Context, arg ListConversati
 		var i ListConversationsByOrgRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.Channel,
+			&i.ExternalUser,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,

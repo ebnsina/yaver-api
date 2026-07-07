@@ -783,9 +783,11 @@ components:
         accent: { type: string }
     Conversation:
       type: object
-      required: [id, status, last_message, message_count, updated_at]
+      required: [id, channel, customer, status, last_message, message_count, updated_at]
       properties:
         id: { type: string }
+        channel: { type: string }
+        customer: { type: string }
         status: { type: string }
         last_message: { type: string }
         message_count: { type: integer }
