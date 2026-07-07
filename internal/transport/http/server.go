@@ -13,15 +13,18 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/auth"
 	"github.com/ebnsina/yaver-api/internal/service/calls"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
+	"github.com/ebnsina/yaver-api/internal/service/webhooks"
 	"github.com/ebnsina/yaver-api/pkg/phone"
 )
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
 // arrive with rate-limit in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, callsSvc *calls.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, orch domain.Orchestrator) http.Handler {
-	ah := &authHandler{log: log, svc: authSvc, secure: env != "dev"}
+func New(log *slog.Logger, env string, authSvc *auth.Service, callsSvc *calls.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
+	dev := env == "dev"
+	ah := &authHandler{log: log, svc: authSvc, secure: !dev}
 	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
-	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc, devMint: env == "dev"}
+	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc, devMint: dev}
+	wh := &webhookHandler{log: log, svc: webhooksSvc, dev: dev}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -37,6 +40,9 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, callsSvc *calls.Se
 	// Merchant ingest (X-API-Key).
 	mux.Handle("POST /v1/events", ih.requireAPIKey(http.HandlerFunc(ih.postEvent)))
 	mux.HandleFunc("POST /v1/dev/api-keys", ih.mintKey)
+
+	// Webhook config (dev sets the endpoint; dashboard settings in Phase 1).
+	mux.HandleFunc("POST /v1/dev/webhook", wh.setEndpoint)
 
 	// Dev endpoints (no telco): simulate a full flow, or enqueue place_call.
 	mux.HandleFunc("POST /v1/dev/test-call", ch.testCall)

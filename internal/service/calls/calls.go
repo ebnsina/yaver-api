@@ -5,6 +5,7 @@ package calls
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/ebnsina/yaver-api/internal/domain"
 	"github.com/ebnsina/yaver-api/internal/flowengine"
@@ -14,13 +15,13 @@ import (
 type Service struct {
 	ivr      *flowengine.IVR
 	provider domain.VoiceProvider
-	calls    domain.CallRepo
+	outcomes domain.OutcomeRepo
 	flows    domain.FlowRepo
 	clock    domain.Clock
 }
 
-func New(provider domain.VoiceProvider, callRepo domain.CallRepo, flowRepo domain.FlowRepo, clock domain.Clock) *Service {
-	return &Service{ivr: flowengine.NewIVR(), provider: provider, calls: callRepo, flows: flowRepo, clock: clock}
+func New(provider domain.VoiceProvider, outcomeRepo domain.OutcomeRepo, flowRepo domain.FlowRepo, clock domain.Clock) *Service {
+	return &Service{ivr: flowengine.NewIVR(), provider: provider, outcomes: outcomeRepo, flows: flowRepo, clock: clock}
 }
 
 // RunTestCall loads the named active flow, drives it with a simulated keypress
@@ -54,10 +55,23 @@ func (s *Service) RunTestCall(ctx context.Context, orgID domain.OrgID, toPhone, 
 		Result:         out.Result,
 		CreatedAt:      s.clock.Now(),
 	}
-	if err := s.calls.Create(ctx, call); err != nil {
+	// Persist the call and the webhook outbox row in one transaction.
+	if err := s.outcomes.RecordCallOutcome(ctx, call, outcomeEvent(call)); err != nil {
 		return nil, nil, err
 	}
 	return out, call, nil
+}
+
+// outcomeEvent builds the webhook payload for a terminal call.
+func outcomeEvent(c *domain.Call) *domain.OutboxEvent {
+	event := "call." + string(c.Status) // e.g. call.completed, call.no_answer
+	payload, _ := json.Marshal(map[string]any{
+		"event":   event,
+		"call_id": string(c.ID),
+		"status":  string(c.Status),
+		"result":  c.Result,
+	})
+	return &domain.OutboxEvent{Event: event, Payload: payload}
 }
 
 // PlaceCall is the place_call job handler: dial via the VoiceProvider and record
@@ -68,7 +82,8 @@ func (s *Service) PlaceCall(ctx context.Context, in domain.PlaceCallInput) error
 	if err != nil {
 		return err
 	}
-	return s.calls.Create(ctx, &domain.Call{
+	// Queued call: persist only, no outbox event (not a terminal outcome).
+	return s.outcomes.RecordCallOutcome(ctx, &domain.Call{
 		ID:             domain.CallID(id.New("call")),
 		OrgID:          in.OrgID,
 		FlowID:         in.FlowID,
@@ -76,5 +91,5 @@ func (s *Service) PlaceCall(ctx context.Context, in domain.PlaceCallInput) error
 		Direction:      domain.Outbound,
 		Status:         domain.StatusQueued,
 		CreatedAt:      s.clock.Now(),
-	})
+	}, nil)
 }

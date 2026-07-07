@@ -26,7 +26,9 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/auth"
 	"github.com/ebnsina/yaver-api/internal/service/calls"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
+	"github.com/ebnsina/yaver-api/internal/service/webhooks"
 	httptransport "github.com/ebnsina/yaver-api/internal/transport/http"
+	"github.com/ebnsina/yaver-api/pkg/crypto"
 )
 
 func main() {
@@ -47,9 +49,15 @@ func main() {
 
 	// Wire ports → adapters. Swap memory/mock/local for postgres/livekit/hatchet
 	// without touching the service layer.
+	cipher, err := crypto.New(cfg.EncryptionKey)
+	if err != nil {
+		log.Error("encryption key", "err", err)
+		os.Exit(1)
+	}
+
 	flowRepo := postgres.NewFlowRepo(pool)
 	authSvc := auth.New(postgres.NewAuthRepo(pool), clock.Real{}, cfg.AuthSecret, cfg.Env)
-	callsSvc := calls.New(voicemock.New(log), postgres.NewCallRepo(pool), flowRepo, clock.Real{})
+	callsSvc := calls.New(voicemock.New(log), postgres.NewOutcomeRepo(pool), flowRepo, clock.Real{})
 
 	// Orchestrator: Hatchet (durable, fairness-keyed) or the in-process local
 	// dispatcher. Both satisfy domain.Orchestrator.
@@ -78,7 +86,11 @@ func main() {
 	keysSvc := apikeys.New(postgres.NewAPIKeyRepo(pool))
 	ingestSvc := ingest.New(postgres.NewEventRepo(pool), flowRepo, orch)
 
-	handler := httptransport.New(log, cfg.Env, authSvc, callsSvc, keysSvc, ingestSvc, orch)
+	// Webhook dispatcher: drains the outbox and delivers, on its own loop.
+	webhooksSvc := webhooks.New(postgres.NewWebhookRepo(pool), cipher, log)
+	go webhooksSvc.Run(context.Background())
+
+	handler := httptransport.New(log, cfg.Env, authSvc, callsSvc, keysSvc, ingestSvc, webhooksSvc, orch)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,

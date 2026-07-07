@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type ApiKey struct {
@@ -86,4 +87,38 @@ type User struct {
 	Email     *string
 	Name      *string
 	CreatedAt time.Time
+}
+
+type WebhookDelivery struct {
+	ID             string
+	OrgID          string
+	Event          string
+	Url            string
+	Payload        []byte
+	Status         string
+	Attempts       int32
+	LastStatusCode pgtype.Int4
+	LastError      *string
+	NextRetryAt    time.Time
+	DeliveredAt    *time.Time
+	CreatedAt      time.Time
+}
+
+type WebhookEndpoint struct {
+	ID        string
+	OrgID     string
+	Url       string
+	SecretEnc []byte
+	Events    []string
+	Active    bool
+	CreatedAt time.Time
+}
+
+type WebhookOutbox struct {
+	ID           int64
+	OrgID        string
+	Event        string
+	Payload      []byte
+	CreatedAt    time.Time
+	DispatchedAt *time.Time
 }
