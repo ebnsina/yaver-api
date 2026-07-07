@@ -20,8 +20,10 @@ import (
 	"github.com/ebnsina/yaver-api/internal/platform/clock"
 	"github.com/ebnsina/yaver-api/internal/platform/config"
 	"github.com/ebnsina/yaver-api/internal/platform/db"
+	"github.com/ebnsina/yaver-api/internal/service/apikeys"
 	"github.com/ebnsina/yaver-api/internal/service/auth"
 	"github.com/ebnsina/yaver-api/internal/service/calls"
+	"github.com/ebnsina/yaver-api/internal/service/ingest"
 	httptransport "github.com/ebnsina/yaver-api/internal/transport/http"
 )
 
@@ -43,12 +45,15 @@ func main() {
 
 	// Wire ports → adapters. Swap memory/mock/local for postgres/livekit/hatchet
 	// without touching the service layer.
+	flowRepo := postgres.NewFlowRepo(pool)
 	authSvc := auth.New(postgres.NewAuthRepo(pool), clock.Real{}, cfg.AuthSecret, cfg.Env)
-	callsSvc := calls.New(voicemock.New(log), postgres.NewCallRepo(pool), postgres.NewFlowRepo(pool), clock.Real{})
+	callsSvc := calls.New(voicemock.New(log), postgres.NewCallRepo(pool), flowRepo, clock.Real{})
 	orch := orchlocal.New(log, 8, callsSvc.PlaceCall)
 	defer orch.Shutdown()
+	keysSvc := apikeys.New(postgres.NewAPIKeyRepo(pool))
+	ingestSvc := ingest.New(postgres.NewEventRepo(pool), flowRepo, orch)
 
-	handler := httptransport.New(log, cfg.Env, authSvc, callsSvc, orch)
+	handler := httptransport.New(log, cfg.Env, authSvc, callsSvc, keysSvc, ingestSvc, orch)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,

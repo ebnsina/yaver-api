@@ -9,16 +9,19 @@ import (
 	"net/http"
 
 	"github.com/ebnsina/yaver-api/internal/domain"
+	"github.com/ebnsina/yaver-api/internal/service/apikeys"
 	"github.com/ebnsina/yaver-api/internal/service/auth"
 	"github.com/ebnsina/yaver-api/internal/service/calls"
+	"github.com/ebnsina/yaver-api/internal/service/ingest"
 	"github.com/ebnsina/yaver-api/pkg/phone"
 )
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
-// arrive with rate-limit / API keys in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, callsSvc *calls.Service, orch domain.Orchestrator) http.Handler {
+// arrive with rate-limit in Phase 1.)
+func New(log *slog.Logger, env string, authSvc *auth.Service, callsSvc *calls.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, orch domain.Orchestrator) http.Handler {
 	ah := &authHandler{log: log, svc: authSvc, secure: env != "dev"}
 	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
+	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc, devMint: env == "dev"}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -30,6 +33,10 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, callsSvc *calls.Se
 	mux.HandleFunc("POST /v1/auth/otp/verify", ah.verifyOTP)
 	mux.HandleFunc("POST /v1/auth/logout", ah.logout)
 	mux.Handle("GET /v1/me", ah.requireAuth(http.HandlerFunc(ah.me)))
+
+	// Merchant ingest (X-API-Key).
+	mux.Handle("POST /v1/events", ih.requireAPIKey(http.HandlerFunc(ih.postEvent)))
+	mux.HandleFunc("POST /v1/dev/api-keys", ih.mintKey)
 
 	// Dev endpoints (no telco): simulate a full flow, or enqueue place_call.
 	mux.HandleFunc("POST /v1/dev/test-call", ch.testCall)

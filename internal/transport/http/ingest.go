@@ -1,0 +1,97 @@
+package http
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
+	"net/http"
+
+	"github.com/ebnsina/yaver-api/internal/domain"
+	"github.com/ebnsina/yaver-api/internal/service/apikeys"
+	"github.com/ebnsina/yaver-api/internal/service/ingest"
+)
+
+const orgKey ctxKey = 1
+
+type ingestHandler struct {
+	log     *slog.Logger
+	keys    *apikeys.Service
+	ingest  *ingest.Service
+	devMint bool // expose the dev key-mint endpoint outside prod
+}
+
+// requireAPIKey authenticates X-API-Key and injects the org.
+func (h *ingestHandler) requireAPIKey(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		org, ok, err := h.keys.Authenticate(r.Context(), r.Header.Get("X-API-Key"))
+		if err != nil {
+			h.log.Error("apikey auth", "err", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+			return
+		}
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid api key"})
+			return
+		}
+		ctx := context.WithValue(r.Context(), orgKey, org)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+type eventBody struct {
+	EventType string `json:"event_type"`
+	EventID   string `json:"event_id"`
+	Customer  struct {
+		Phone string `json:"phone"`
+	} `json:"customer"`
+}
+
+func (h *ingestHandler) postEvent(w http.ResponseWriter, r *http.Request) {
+	org, _ := r.Context().Value(orgKey).(domain.OrgID)
+
+	raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	var body eventBody
+	if err := json.Unmarshal(raw, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	if body.EventType == "" || body.EventID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "event_type and event_id are required"})
+		return
+	}
+
+	eventID, dup, err := h.ingest.Accept(r.Context(), org, ingest.Event{
+		Type:       body.EventType,
+		ExternalID: body.EventID,
+		Phone:      body.Customer.Phone,
+		Payload:    raw,
+	})
+	switch {
+	case errors.Is(err, domain.ErrInvalidPhone):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid phone"})
+	case err != nil:
+		h.log.Error("ingest", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+	case dup:
+		writeJSON(w, http.StatusOK, map[string]string{"status": "duplicate"})
+	default:
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted", "event_id": eventID})
+	}
+}
+
+// mintKey is a dev-only helper to create an API key for org_demo.
+func (h *ingestHandler) mintKey(w http.ResponseWriter, r *http.Request) {
+	if !h.devMint {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	full, err := h.keys.Mint(r.Context(), "org_demo", "dev")
+	if err != nil {
+		h.log.Error("mint key", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"api_key": full})
+}

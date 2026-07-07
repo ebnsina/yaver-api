@@ -10,6 +10,16 @@ import (
 	"github.com/google/uuid"
 )
 
+type ApiKey struct {
+	ID         string
+	OrgID      string
+	Prefix     string
+	SecretHash []byte
+	Name       *string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
+
 type Call struct {
 	ID             string
 	OrgID          string
@@ -19,6 +29,16 @@ type Call struct {
 	Status         string
 	Result         *string
 	CreatedAt      time.Time
+}
+
+type Event struct {
+	ID              string
+	OrgID           string
+	Type            string
+	ExternalEventID string
+	Payload         []byte
+	Status          string
+	CreatedAt       time.Time
 }
 
 type Flow struct {
