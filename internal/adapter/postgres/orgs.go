@@ -43,7 +43,7 @@ func (r *OrgRepo) EnsureForUser(ctx context.Context, userID, name string) (domai
 	if err != nil {
 		return domain.Org{}, err
 	}
-	if row.ID == orgID { // we created it — seed the default flow
+	if row.ID == orgID { // we created it — seed the default flow + starter credits
 		_ = q.CreateFlow(ctx, gen.CreateFlowParams{
 			ID:      "flow_" + orgID.String(),
 			OrgID:   orgID.String(),
@@ -54,6 +54,10 @@ func (r *OrgRepo) EnsureForUser(ctx context.Context, userID, name string) (domai
 			Locale:  "en",
 			Spec:    defaultOrderConfirmSpec,
 		})
+		_ = q.EnsureCreditAccount(ctx, orgID.String())
+		if _, err := q.AdjustBalance(ctx, gen.AdjustBalanceParams{OrgID: orgID.String(), Balance: 500}); err == nil {
+			_ = q.AddLedger(ctx, gen.AddLedgerParams{ID: "seed_" + orgID.String(), OrgID: orgID.String(), Delta: 500, Reason: "signup_grant"})
+		}
 	}
 	return domain.Org{ID: domain.OrgID(row.ID.String()), Name: row.Name}, nil
 }

@@ -443,6 +443,45 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/billing:
+    get:
+      operationId: getBilling
+      summary: Credit balance and recent ledger
+      tags: [billing]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Billing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Billing'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/billing/topup:
+    post:
+      operationId: topUpCredits
+      summary: Add credits to the org balance
+      tags: [billing]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { type: integer }
+      responses:
+        '200':
+          description: New balance
+          content:
+            application/json:
+              schema: { type: object, required: [balance], properties: { balance: { type: integer } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/analytics/summary:
     get:
       operationId: getSummary
@@ -759,6 +798,21 @@ components:
       required: [secret]
       properties:
         secret: { type: string }
+    LedgerEntry:
+      type: object
+      required: [delta, reason, created_at]
+      properties:
+        delta: { type: integer }
+        reason: { type: string }
+        created_at: { type: string, format: date-time }
+    Billing:
+      type: object
+      required: [balance, ledger]
+      properties:
+        balance: { type: integer }
+        ledger:
+          type: array
+          items: { $ref: '#/components/schemas/LedgerEntry' }
     Channel:
       type: object
       required: [type, external_id, created_at]

@@ -12,17 +12,21 @@ import (
 	"github.com/ebnsina/yaver-api/pkg/id"
 )
 
+// creditsPerCall is what one call costs.
+const creditsPerCall = 1
+
 type Service struct {
 	ivr      *flowengine.IVR
 	provider domain.VoiceProvider
 	outcomes domain.OutcomeRepo
 	calls    domain.CallRepo
 	flows    domain.FlowRepo
+	credits  domain.CreditRepo
 	clock    domain.Clock
 }
 
-func New(provider domain.VoiceProvider, outcomeRepo domain.OutcomeRepo, callRepo domain.CallRepo, flowRepo domain.FlowRepo, clock domain.Clock) *Service {
-	return &Service{ivr: flowengine.NewIVR(), provider: provider, outcomes: outcomeRepo, calls: callRepo, flows: flowRepo, clock: clock}
+func New(provider domain.VoiceProvider, outcomeRepo domain.OutcomeRepo, callRepo domain.CallRepo, flowRepo domain.FlowRepo, credits domain.CreditRepo, clock domain.Clock) *Service {
+	return &Service{ivr: flowengine.NewIVR(), provider: provider, outcomes: outcomeRepo, calls: callRepo, flows: flowRepo, credits: credits, clock: clock}
 }
 
 // List returns recent calls for an org, newest first.
@@ -60,6 +64,13 @@ func (s *Service) RunTestCall(ctx context.Context, orgID domain.OrgID, toPhone, 
 	}
 	if !found {
 		return nil, nil, domain.ErrNotFound
+	}
+
+	// Meter usage: a call costs credits. Charge before dialing.
+	if ok, _, err := s.credits.TryDeduct(ctx, orgID, creditsPerCall, "call"); err != nil {
+		return nil, nil, err
+	} else if !ok {
+		return nil, nil, domain.ErrInsufficientCredits
 	}
 
 	pid, err := s.provider.PlaceCall(ctx, domain.CallRequest{OrgID: orgID, ToPhone: toPhone, Flow: flow})
@@ -105,6 +116,13 @@ func outcomeEvent(c *domain.Call) *domain.OutboxEvent {
 // a queued Call. (Live leg events land in Phase 1.) Written to be safe under the
 // orchestrator's at-least-once delivery.
 func (s *Service) PlaceCall(ctx context.Context, in domain.PlaceCallInput) error {
+	// Meter usage before dialing; skip (no call) if the org is out of credits.
+	if ok, _, err := s.credits.TryDeduct(ctx, in.OrgID, creditsPerCall, "call"); err != nil {
+		return err
+	} else if !ok {
+		return domain.ErrInsufficientCredits
+	}
+
 	pid, err := s.provider.PlaceCall(ctx, domain.CallRequest{OrgID: in.OrgID, ToPhone: in.ToPhone})
 	if err != nil {
 		return err

@@ -12,6 +12,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/domain"
 	"github.com/ebnsina/yaver-api/internal/service/apikeys"
 	"github.com/ebnsina/yaver-api/internal/service/auth"
+	"github.com/ebnsina/yaver-api/internal/service/billing"
 	"github.com/ebnsina/yaver-api/internal/service/calls"
 	"github.com/ebnsina/yaver-api/internal/service/campaigns"
 	"github.com/ebnsina/yaver-api/internal/service/chat"
@@ -26,7 +27,7 @@ import (
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
 // arrive with rate-limit in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
+func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, billingSvc *billing.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
 	dev := env == "dev"
 	ah := &authHandler{log: log, svc: authSvc, orgs: orgStore, secure: !dev}
 	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
@@ -37,6 +38,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	ph := &publicHandler{log: log, keys: keysSvc, chat: chatSvc}
 	cnh := &channelsHandler{log: log, svc: msgSvc}
 	mwh := &metaWebhookHandler{log: log, svc: msgSvc}
+	bh := &billingHandler{log: log, svc: billingSvc}
 	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc}
 	wh := &webhookHandler{log: log, svc: webhooksSvc}
 
@@ -57,6 +59,10 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("GET /v1/calls", ah.requireAuth(http.HandlerFunc(ch.listCalls)))
 	mux.Handle("GET /v1/calls/{id}", ah.requireAuth(http.HandlerFunc(ch.getCall)))
 	mux.Handle("GET /v1/analytics/summary", ah.requireAuth(http.HandlerFunc(ch.summary)))
+
+	// Billing (credits).
+	mux.Handle("GET /v1/billing", ah.requireAuth(http.HandlerFunc(bh.get)))
+	mux.Handle("POST /v1/billing/topup", ah.requireAuth(http.HandlerFunc(bh.topUp)))
 
 	// Customers + DND.
 	mux.Handle("GET /v1/customers", ah.requireAuth(http.HandlerFunc(cuh.list)))
@@ -140,6 +146,10 @@ func (h *callsHandler) testCall(w http.ResponseWriter, r *http.Request) {
 	out, call, err := h.svc.RunTestCall(r.Context(), orgFromCtx(r), e164, req.Digit, "order_confirm")
 	if errors.Is(err, domain.ErrNotFound) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no active order_confirm flow"})
+		return
+	}
+	if errors.Is(err, domain.ErrInsufficientCredits) {
+		writeJSON(w, http.StatusPaymentRequired, map[string]string{"error": "out of credits — top up to place calls"})
 		return
 	}
 	if err != nil {

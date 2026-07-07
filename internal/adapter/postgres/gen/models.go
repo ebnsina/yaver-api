@@ -73,6 +73,14 @@ type Conversation struct {
 	ExternalUser *string
 }
 
+type CreditLedger struct {
+	ID        string
+	OrgID     string
+	Delta     int32
+	Reason    string
+	CreatedAt time.Time
+}
+
 type Customer struct {
 	ID         string
 	OrgID      string
@@ -120,6 +128,11 @@ type Org struct {
 	OwnerUserID         uuid.UUID
 	CreditsBalancePaisa int64
 	CreatedAt           time.Time
+}
+
+type OrgCredit struct {
+	OrgID   string
+	Balance int32
 }
 
 type OtpCode struct {
