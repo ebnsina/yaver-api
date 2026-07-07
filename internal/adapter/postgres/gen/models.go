@@ -10,6 +10,30 @@ import (
 	"github.com/google/uuid"
 )
 
+type Call struct {
+	ID             string
+	OrgID          string
+	FlowID         *string
+	ProviderCallID *string
+	Direction      string
+	Status         string
+	Result         *string
+	CreatedAt      time.Time
+}
+
+type Flow struct {
+	ID        string
+	OrgID     string
+	Name      string
+	Version   int32
+	Channel   string
+	Type      string
+	Locale    string
+	Spec      []byte
+	IsActive  bool
+	CreatedAt time.Time
+}
+
 type Org struct {
 	ID                  uuid.UUID
 	Name                string

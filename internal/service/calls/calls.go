@@ -1,6 +1,6 @@
 // Package calls is the application service for voice interactions.
-// It orchestrates the flow engine + a VoiceProvider + the call repo, and
-// depends only on domain interfaces.
+// It orchestrates the flow engine + a VoiceProvider + the repos, and depends
+// only on domain interfaces.
 package calls
 
 import (
@@ -14,44 +14,28 @@ import (
 type Service struct {
 	ivr      *flowengine.IVR
 	provider domain.VoiceProvider
-	repo     domain.CallRepo
+	calls    domain.CallRepo
+	flows    domain.FlowRepo
 	clock    domain.Clock
 }
 
-func New(provider domain.VoiceProvider, repo domain.CallRepo, clock domain.Clock) *Service {
-	return &Service{ivr: flowengine.NewIVR(), provider: provider, repo: repo, clock: clock}
+func New(provider domain.VoiceProvider, callRepo domain.CallRepo, flowRepo domain.FlowRepo, clock domain.Clock) *Service {
+	return &Service{ivr: flowengine.NewIVR(), provider: provider, calls: callRepo, flows: flowRepo, clock: clock}
 }
 
-// PlaceCall is the place_call job handler: it dials via the VoiceProvider and
-// records a queued Call. (Flow attachment + live leg events land in Phase 1;
-// here it demonstrates the orchestrated path.) Idempotency guards come with the
-// Postgres repo — the handler is written to be safe under at-least-once.
-func (s *Service) PlaceCall(ctx context.Context, in domain.PlaceCallInput) error {
-	pid, err := s.provider.PlaceCall(ctx, domain.CallRequest{OrgID: in.OrgID, ToPhone: in.ToPhone})
+// RunTestCall loads the named active flow, drives it with a simulated keypress
+// (the Phase 0 "no telco" path), persists the Call, and returns the outcome.
+func (s *Service) RunTestCall(ctx context.Context, orgID domain.OrgID, toPhone, digit, flowName string) (*domain.Outcome, *domain.Call, error) {
+	flow, found, err := s.flows.GetActiveFlow(ctx, orgID, flowName)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	call := &domain.Call{
-		ID:        domain.CallID(id.New("call")),
-		OrgID:     in.OrgID,
-		FlowID:    in.FlowID,
-		Direction: domain.Outbound,
-		Status:    domain.StatusQueued,
-		CreatedAt: s.clock.Now(),
+	if !found {
+		return nil, nil, domain.ErrNotFound
 	}
-	_ = pid // stored on the call in Phase 1 (provider_call_id column)
-	return s.repo.Create(ctx, call)
-}
 
-// RunTestCall drives a full IVR interaction with a simulated keypress — the
-// Phase 0 "flow logic, no telco" path. It places the call via the (mock)
-// provider, advances the engine, persists the Call, and returns the outcome.
-func (s *Service) RunTestCall(ctx context.Context, orgID domain.OrgID, toPhone, digit string, flow domain.Flow) (*domain.Outcome, *domain.Call, error) {
-	if _, err := s.provider.PlaceCall(ctx, domain.CallRequest{
-		OrgID:   orgID,
-		ToPhone: toPhone,
-		Flow:    flow,
-	}); err != nil {
+	pid, err := s.provider.PlaceCall(ctx, domain.CallRequest{OrgID: orgID, ToPhone: toPhone, Flow: flow})
+	if err != nil {
 		return nil, nil, err
 	}
 
@@ -61,16 +45,36 @@ func (s *Service) RunTestCall(ctx context.Context, orgID domain.OrgID, toPhone, 
 	}
 
 	call := &domain.Call{
-		ID:        domain.CallID(id.New("call")),
-		OrgID:     orgID,
-		FlowID:    flow.ID,
-		Direction: domain.Outbound,
-		Status:    out.Status,
-		Result:    out.Result,
-		CreatedAt: s.clock.Now(),
+		ID:             domain.CallID(id.New("call")),
+		OrgID:          orgID,
+		FlowID:         flow.ID,
+		ProviderCallID: pid,
+		Direction:      domain.Outbound,
+		Status:         out.Status,
+		Result:         out.Result,
+		CreatedAt:      s.clock.Now(),
 	}
-	if err := s.repo.Create(ctx, call); err != nil {
+	if err := s.calls.Create(ctx, call); err != nil {
 		return nil, nil, err
 	}
 	return out, call, nil
+}
+
+// PlaceCall is the place_call job handler: dial via the VoiceProvider and record
+// a queued Call. (Live leg events land in Phase 1.) Written to be safe under the
+// orchestrator's at-least-once delivery.
+func (s *Service) PlaceCall(ctx context.Context, in domain.PlaceCallInput) error {
+	pid, err := s.provider.PlaceCall(ctx, domain.CallRequest{OrgID: in.OrgID, ToPhone: in.ToPhone})
+	if err != nil {
+		return err
+	}
+	return s.calls.Create(ctx, &domain.Call{
+		ID:             domain.CallID(id.New("call")),
+		OrgID:          in.OrgID,
+		FlowID:         in.FlowID,
+		ProviderCallID: pid,
+		Direction:      domain.Outbound,
+		Status:         domain.StatusQueued,
+		CreatedAt:      s.clock.Now(),
+	})
 }

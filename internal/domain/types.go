@@ -92,13 +92,14 @@ type Gather struct {
 
 // Call is a single voice interaction instance.
 type Call struct {
-	ID        CallID
-	OrgID     OrgID
-	FlowID    FlowID
-	Direction Direction
-	Status    CallStatus
-	Result    string
-	CreatedAt time.Time
+	ID             CallID
+	OrgID          OrgID
+	FlowID         FlowID
+	ProviderCallID ProviderCallID
+	Direction      Direction
+	Status         CallStatus
+	Result         string
+	CreatedAt      time.Time
 }
 
 // ProviderCallID is the telephony provider's handle for a placed call.

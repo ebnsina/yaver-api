@@ -4,6 +4,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -64,7 +65,11 @@ func (h *callsHandler) testCall(w http.ResponseWriter, r *http.Request) {
 	if req.Digit == "" {
 		req.Digit = "1"
 	}
-	out, call, err := h.svc.RunTestCall(r.Context(), "org_demo", e164, req.Digit, demoOrderConfirmFlow())
+	out, call, err := h.svc.RunTestCall(r.Context(), "org_demo", e164, req.Digit, "order_confirm")
+	if errors.Is(err, domain.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no active order_confirm flow"})
+		return
+	}
 	if err != nil {
 		h.log.Error("test-call failed", "err", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})

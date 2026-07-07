@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ebnsina/yaver-api/internal/adapter/memory"
 	orchlocal "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/local"
 	"github.com/ebnsina/yaver-api/internal/adapter/postgres"
 	voicemock "github.com/ebnsina/yaver-api/internal/adapter/voice/mock"
@@ -45,7 +44,7 @@ func main() {
 	// Wire ports → adapters. Swap memory/mock/local for postgres/livekit/hatchet
 	// without touching the service layer.
 	authSvc := auth.New(postgres.NewAuthRepo(pool), clock.Real{}, cfg.AuthSecret, cfg.Env)
-	callsSvc := calls.New(voicemock.New(log), memory.NewCallRepo(), clock.Real{})
+	callsSvc := calls.New(voicemock.New(log), postgres.NewCallRepo(pool), postgres.NewFlowRepo(pool), clock.Real{})
 	orch := orchlocal.New(log, 8, callsSvc.PlaceCall)
 	defer orch.Shutdown()
 

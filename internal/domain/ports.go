@@ -38,6 +38,12 @@ type CallRepo interface {
 	Get(ctx context.Context, id CallID) (*Call, error)
 }
 
+// FlowRepo loads flow definitions.
+type FlowRepo interface {
+	// GetActiveFlow returns the active flow for (org, name). found=false if none.
+	GetActiveFlow(ctx context.Context, orgID OrgID, name string) (f Flow, found bool, err error)
+}
+
 // Clock is injected so time is testable.
 type Clock interface {
 	Now() time.Time
