@@ -70,6 +70,19 @@ func (r *CallRepo) ListByOrg(ctx context.Context, orgID domain.OrgID, limit int)
 	return out, nil
 }
 
+func (r *CallRepo) Summary(ctx context.Context, orgID domain.OrgID) (domain.CallSummary, error) {
+	row, err := r.q.CallSummary(ctx, string(orgID))
+	if err != nil {
+		return domain.CallSummary{}, err
+	}
+	return domain.CallSummary{
+		Total:     int(row.Total),
+		Confirmed: int(row.Confirmed),
+		Cancelled: int(row.Cancelled),
+		Today:     int(row.Today),
+	}, nil
+}
+
 // strPtr maps "" -> NULL so empty optional columns store as NULL.
 func strPtr(s string) *string {
 	if s == "" {

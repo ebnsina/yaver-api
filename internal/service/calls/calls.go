@@ -33,6 +33,11 @@ func (s *Service) List(ctx context.Context, orgID domain.OrgID, limit int) ([]do
 	return s.calls.ListByOrg(ctx, orgID, limit)
 }
 
+// Summary returns the dashboard metrics rollup for an org.
+func (s *Service) Summary(ctx context.Context, orgID domain.OrgID) (domain.CallSummary, error) {
+	return s.calls.Summary(ctx, orgID)
+}
+
 // RunTestCall loads the named active flow, drives it with a simulated keypress
 // (the Phase 0 "no telco" path), persists the Call, and returns the outcome.
 func (s *Service) RunTestCall(ctx context.Context, orgID domain.OrgID, toPhone, digit, flowName string) (*domain.Outcome, *domain.Call, error) {

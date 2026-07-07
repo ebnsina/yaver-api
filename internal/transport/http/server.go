@@ -43,6 +43,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgProv domain.Org
 	mux.HandleFunc("POST /v1/auth/logout", ah.logout)
 	mux.Handle("GET /v1/me", ah.requireAuth(http.HandlerFunc(ah.me)))
 	mux.Handle("GET /v1/calls", ah.requireAuth(http.HandlerFunc(ch.listCalls)))
+	mux.Handle("GET /v1/analytics/summary", ah.requireAuth(http.HandlerFunc(ch.summary)))
 
 	// Merchant ingest (X-API-Key resolves the org).
 	mux.Handle("POST /v1/events", ih.requireAPIKey(http.HandlerFunc(ih.postEvent)))
@@ -125,6 +126,27 @@ func (h *callsHandler) listCalls(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"calls": out})
+}
+
+// summary returns dashboard metrics for the org.
+func (h *callsHandler) summary(w http.ResponseWriter, r *http.Request) {
+	s, err := h.svc.Summary(r.Context(), orgFromCtx(r))
+	if err != nil {
+		h.log.Error("summary", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	rate := 0
+	if s.Total > 0 {
+		rate = int(float64(s.Confirmed) / float64(s.Total) * 100)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"total":             s.Total,
+		"confirmed":         s.Confirmed,
+		"cancelled":         s.Cancelled,
+		"today":             s.Today,
+		"confirmation_rate": rate,
+	})
 }
 
 // placeCall enqueues a place_call job through the orchestrator (async path).

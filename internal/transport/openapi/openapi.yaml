@@ -95,6 +95,45 @@ paths:
                 $ref: '#/components/schemas/CallList'
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/analytics/summary:
+    get:
+      operationId: getSummary
+      summary: Dashboard metrics rollup
+      tags: [analytics]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Summary'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/dev/test-call:
+    post:
+      operationId: testCall
+      summary: Simulate a call with a keypress (no telephony) — generates an outcome
+      tags: [calls]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestCallRequest'
+      responses:
+        '200':
+          description: Simulated call outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestCallResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/settings/api-keys:
     post:
       operationId: createApiKey
@@ -242,6 +281,28 @@ components:
         phone: { type: string }
         email: { type: string }
         name: { type: string }
+    Summary:
+      type: object
+      required: [total, confirmed, cancelled, today, confirmation_rate]
+      properties:
+        total: { type: integer }
+        confirmed: { type: integer }
+        cancelled: { type: integer }
+        today: { type: integer }
+        confirmation_rate: { type: integer, description: percent 0-100 }
+    TestCallRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone: { type: string }
+        digit: { type: string, description: 'simulated keypress: 1|2|3' }
+    TestCallResult:
+      type: object
+      required: [call_id, status, result]
+      properties:
+        call_id: { type: string }
+        status: { type: string }
+        result: { type: string }
     ApiKeyResult:
       type: object
       required: [api_key]

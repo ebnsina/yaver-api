@@ -9,6 +9,35 @@ import (
 	"context"
 )
 
+const callSummary = `-- name: CallSummary :one
+SELECT
+    count(*)::bigint                                                          AS total,
+    count(*) FILTER (WHERE result = 'confirmed')::bigint                      AS confirmed,
+    count(*) FILTER (WHERE result = 'cancelled')::bigint                      AS cancelled,
+    count(*) FILTER (WHERE created_at >= now() - interval '1 day')::bigint    AS today
+FROM calls
+WHERE org_id = $1
+`
+
+type CallSummaryRow struct {
+	Total     int64
+	Confirmed int64
+	Cancelled int64
+	Today     int64
+}
+
+func (q *Queries) CallSummary(ctx context.Context, orgID string) (CallSummaryRow, error) {
+	row := q.db.QueryRow(ctx, callSummary, orgID)
+	var i CallSummaryRow
+	err := row.Scan(
+		&i.Total,
+		&i.Confirmed,
+		&i.Cancelled,
+		&i.Today,
+	)
+	return i, err
+}
+
 const createCall = `-- name: CreateCall :exec
 INSERT INTO calls (id, org_id, flow_id, provider_call_id, direction, status, result)
 VALUES ($1, $2, $3, $4, $5, $6, $7)

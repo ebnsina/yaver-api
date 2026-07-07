@@ -32,11 +32,20 @@ type Orchestrator interface {
 	EnqueuePlaceCall(ctx context.Context, in PlaceCallInput) error
 }
 
+// CallSummary is a small metrics rollup for the dashboard.
+type CallSummary struct {
+	Total     int
+	Confirmed int
+	Cancelled int
+	Today     int
+}
+
 // CallRepo persists and reads voice interactions.
 type CallRepo interface {
 	Create(ctx context.Context, c *Call) error
 	Get(ctx context.Context, id CallID) (*Call, error)
 	ListByOrg(ctx context.Context, orgID OrgID, limit int) ([]Call, error)
+	Summary(ctx context.Context, orgID OrgID) (CallSummary, error)
 }
 
 // OrgProvisioner resolves (and lazily creates) the org for a user. Called on the
