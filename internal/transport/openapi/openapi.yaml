@@ -435,10 +435,66 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/campaigns/{id}/recipients:
+    post:
+      operationId: importCampaignRecipients
+      summary: Import a recipient list from CSV (phone[,name] per row)
+      description: >
+        Rows with an invalid phone (including a header row) are skipped; phones
+        are normalized and deduped. A campaign with recipients dials that list;
+        one with none falls back to all callable customers.
+      tags: [campaigns]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema: { type: string, example: "01711223344,Rahim\n01812345678,Karim" }
+      responses:
+        '200':
+          description: Imported
+          content:
+            application/json:
+              schema: { type: object, required: [added], properties: { added: { type: integer } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/campaigns/{id}/schedule:
+    post:
+      operationId: scheduleCampaign
+      summary: Schedule a draft campaign to auto-start at a future time
+      tags: [campaigns]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [at]
+              properties:
+                at: { type: string, format: date-time, description: 'RFC3339, must be in the future' }
+      responses:
+        '200':
+          description: Scheduled
+          content:
+            application/json:
+              schema: { type: object, properties: { status: { type: string }, at: { type: string, format: date-time } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/BadRequest' }
+
   /v1/campaigns/{id}/start:
     post:
       operationId: startCampaign
-      summary: Dispatch calls to all callable customers
+      summary: Dispatch the campaign now (recipients, or all callable customers)
       tags: [campaigns]
       security:
         - cookieAuth: []
@@ -1206,10 +1262,11 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
-        status: { type: string }
+        status: { type: string, enum: [draft, scheduled, completed] }
         target_count: { type: integer }
         created_at: { type: string, format: date-time }
         started_at: { type: string, format: date-time, nullable: true }
+        scheduled_at: { type: string, format: date-time, nullable: true }
     CampaignList:
       type: object
       required: [campaigns]

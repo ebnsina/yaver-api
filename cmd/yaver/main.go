@@ -123,7 +123,7 @@ func main() {
 	keysSvc := apikeys.New(postgres.NewAPIKeyRepo(pool))
 	custRepo := postgres.NewCustomerRepo(pool)
 	custSvc := customers.New(custRepo)
-	campSvc := campaigns.New(postgres.NewCampaignRepo(pool), custRepo, flowRepo, orch)
+	campSvc := campaigns.New(postgres.NewCampaignRepo(pool), custRepo, flowRepo, orch, clock.Real{})
 	ingestSvc := ingest.New(postgres.NewEventRepo(pool), custRepo, flowRepo, orch)
 
 	// Chat channel — provider-agnostic model behind domain.ChatModel.
@@ -163,6 +163,24 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Campaign scheduler: start due scheduled campaigns on a timer.
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if n, err := campSvc.RunDue(context.Background()); err != nil {
+					log.Error("campaign scheduler", "err", err)
+				} else if n > 0 {
+					log.Info("campaign scheduler: started due campaigns", "count", n)
+				}
+			}
+		}
+	}()
 
 	go func() {
 		log.Info("yaver-api listening", "addr", srv.Addr, "env", cfg.Env)

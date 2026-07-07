@@ -10,6 +10,42 @@ import (
 	"time"
 )
 
+const addRecipient = `-- name: AddRecipient :exec
+INSERT INTO campaign_recipients (id, campaign_id, org_id, phone, name)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (campaign_id, phone) DO NOTHING
+`
+
+type AddRecipientParams struct {
+	ID         string
+	CampaignID string
+	OrgID      string
+	Phone      string
+	Name       string
+}
+
+func (q *Queries) AddRecipient(ctx context.Context, arg AddRecipientParams) error {
+	_, err := q.db.Exec(ctx, addRecipient,
+		arg.ID,
+		arg.CampaignID,
+		arg.OrgID,
+		arg.Phone,
+		arg.Name,
+	)
+	return err
+}
+
+const countRecipients = `-- name: CountRecipients :one
+SELECT count(*)::bigint FROM campaign_recipients WHERE campaign_id = $1
+`
+
+func (q *Queries) CountRecipients(ctx context.Context, campaignID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countRecipients, campaignID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createCampaign = `-- name: CreateCampaign :exec
 INSERT INTO campaigns (id, org_id, name) VALUES ($1, $2, $3)
 `
@@ -25,8 +61,39 @@ func (q *Queries) CreateCampaign(ctx context.Context, arg CreateCampaignParams) 
 	return err
 }
 
+const dueCampaigns = `-- name: DueCampaigns :many
+SELECT id, org_id FROM campaigns
+WHERE status = 'scheduled' AND scheduled_at <= $1
+ORDER BY scheduled_at
+`
+
+type DueCampaignsRow struct {
+	ID    string
+	OrgID string
+}
+
+func (q *Queries) DueCampaigns(ctx context.Context, scheduledAt *time.Time) ([]DueCampaignsRow, error) {
+	rows, err := q.db.Query(ctx, dueCampaigns, scheduledAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DueCampaignsRow
+	for rows.Next() {
+		var i DueCampaignsRow
+		if err := rows.Scan(&i.ID, &i.OrgID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCampaign = `-- name: GetCampaign :one
-SELECT id, org_id, name, status, target_count, created_at, started_at
+SELECT id, org_id, name, status, target_count, created_at, started_at, scheduled_at
 FROM campaigns WHERE id = $1
 `
 
@@ -41,12 +108,13 @@ func (q *Queries) GetCampaign(ctx context.Context, id string) (Campaign, error) 
 		&i.TargetCount,
 		&i.CreatedAt,
 		&i.StartedAt,
+		&i.ScheduledAt,
 	)
 	return i, err
 }
 
 const listCampaignsByOrg = `-- name: ListCampaignsByOrg :many
-SELECT id, name, status, target_count, created_at, started_at
+SELECT id, name, status, target_count, created_at, started_at, scheduled_at
 FROM campaigns WHERE org_id = $1 ORDER BY created_at DESC
 `
 
@@ -57,6 +125,7 @@ type ListCampaignsByOrgRow struct {
 	TargetCount int32
 	CreatedAt   time.Time
 	StartedAt   *time.Time
+	ScheduledAt *time.Time
 }
 
 func (q *Queries) ListCampaignsByOrg(ctx context.Context, orgID string) ([]ListCampaignsByOrgRow, error) {
@@ -75,6 +144,7 @@ func (q *Queries) ListCampaignsByOrg(ctx context.Context, orgID string) ([]ListC
 			&i.TargetCount,
 			&i.CreatedAt,
 			&i.StartedAt,
+			&i.ScheduledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -86,9 +156,54 @@ func (q *Queries) ListCampaignsByOrg(ctx context.Context, orgID string) ([]ListC
 	return items, nil
 }
 
+const listRecipients = `-- name: ListRecipients :many
+SELECT phone, name FROM campaign_recipients WHERE campaign_id = $1 ORDER BY phone
+`
+
+type ListRecipientsRow struct {
+	Phone string
+	Name  string
+}
+
+func (q *Queries) ListRecipients(ctx context.Context, campaignID string) ([]ListRecipientsRow, error) {
+	rows, err := q.db.Query(ctx, listRecipients, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecipientsRow
+	for rows.Next() {
+		var i ListRecipientsRow
+		if err := rows.Scan(&i.Phone, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const scheduleCampaign = `-- name: ScheduleCampaign :exec
+UPDATE campaigns SET status = 'scheduled', scheduled_at = $3
+WHERE id = $1 AND org_id = $2 AND status = 'draft'
+`
+
+type ScheduleCampaignParams struct {
+	ID          string
+	OrgID       string
+	ScheduledAt *time.Time
+}
+
+func (q *Queries) ScheduleCampaign(ctx context.Context, arg ScheduleCampaignParams) error {
+	_, err := q.db.Exec(ctx, scheduleCampaign, arg.ID, arg.OrgID, arg.ScheduledAt)
+	return err
+}
+
 const startCampaign = `-- name: StartCampaign :exec
 UPDATE campaigns SET status = 'completed', target_count = $3, started_at = now()
-WHERE id = $1 AND org_id = $2 AND status = 'draft'
+WHERE id = $1 AND org_id = $2 AND status IN ('draft', 'scheduled')
 `
 
 type StartCampaignParams struct {

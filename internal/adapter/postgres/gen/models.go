@@ -41,6 +41,15 @@ type Campaign struct {
 	TargetCount int32
 	CreatedAt   time.Time
 	StartedAt   *time.Time
+	ScheduledAt *time.Time
+}
+
+type CampaignRecipient struct {
+	ID         string
+	CampaignID string
+	OrgID      string
+	Phone      string
+	Name       string
 }
 
 type ChannelConnection struct {

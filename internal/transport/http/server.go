@@ -90,6 +90,8 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	// Campaigns (bulk outbound).
 	mux.Handle("GET /v1/campaigns", ah.requireAuth(http.HandlerFunc(cah.list)))
 	mux.Handle("POST /v1/campaigns", ah.requireAuth(http.HandlerFunc(cah.create)))
+	mux.Handle("POST /v1/campaigns/{id}/recipients", ah.requireAuth(http.HandlerFunc(cah.importRecipients)))
+	mux.Handle("POST /v1/campaigns/{id}/schedule", ah.requireAuth(http.HandlerFunc(cah.schedule)))
 	mux.Handle("POST /v1/campaigns/{id}/start", ah.requireAuth(http.HandlerFunc(cah.start)))
 
 	// Flows (no-code builder).
