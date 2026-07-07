@@ -552,6 +552,83 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { description: A flow with that name already exists }
 
+  /v1/flows/templates:
+    get:
+      operationId: listFlowTemplates
+      summary: Built-in starter flows the no-code builder can clone
+      tags: [flows]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Templates
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [templates]
+                properties:
+                  templates:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        title: { type: string }
+                        description: { type: string }
+                        channel: { type: string }
+                        type: { type: string }
+                        locale: { type: string }
+                        spec: { type: object, additionalProperties: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/flows/simulate:
+    post:
+      operationId: simulateFlow
+      summary: Dry-run an IVR spec against keypad inputs (in-browser simulator)
+      description: >
+        Runs the deterministic IVR engine over a spec and a sequence of inputs
+        (each a digit or the literal "timeout"), returning every step and the
+        terminal outcome. No telephony, credits, or persistence.
+      tags: [flows]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [spec]
+              properties:
+                spec: { type: object, additionalProperties: true }
+                inputs:
+                  type: array
+                  items: { type: string, description: 'a digit "1".."9" or "timeout"' }
+      responses:
+        '200':
+          description: Simulation trace + outcome
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [steps, ended]
+                properties:
+                  ended: { type: boolean }
+                  result: { type: string }
+                  status: { type: string }
+                  steps:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        node: { type: string }
+                        kind: { type: string, enum: [say, say_gather, hangup] }
+                        awaits_input: { type: boolean }
+                        say: { type: object, additionalProperties: true }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/flows/{id}:
     get:
       operationId: getFlow

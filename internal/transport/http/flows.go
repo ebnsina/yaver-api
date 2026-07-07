@@ -98,6 +98,62 @@ func (h *flowsHandler) get(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// templates returns the built-in starter flows the no-code builder can clone.
+func (h *flowsHandler) templates(w http.ResponseWriter, _ *http.Request) {
+	tpls := flows.Templates()
+	out := make([]map[string]any, 0, len(tpls))
+	for _, t := range tpls {
+		out = append(out, map[string]any{
+			"name":        t.Name,
+			"title":       t.Title,
+			"description": t.Description,
+			"channel":     t.Channel,
+			"type":        t.Type,
+			"locale":      t.Locale,
+			"spec":        json.RawMessage(t.Spec),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"templates": out})
+}
+
+// simulate dry-runs an IVR spec against a sequence of keypad inputs and returns
+// the step trace + outcome — powers the builder's in-browser simulator.
+func (h *flowsHandler) simulate(w http.ResponseWriter, r *http.Request) {
+	raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	var body struct {
+		Spec   json.RawMessage `json:"spec"`
+		Inputs []string        `json:"inputs"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil || len(body.Spec) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "spec required"})
+		return
+	}
+	sim, err := h.svc.Simulate(body.Spec, body.Inputs)
+	if errors.Is(err, domain.ErrFlowInvalid) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid flow spec"})
+		return
+	}
+	if err != nil {
+		h.log.Error("simulate flow", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	steps := make([]map[string]any, 0, len(sim.Steps))
+	for _, st := range sim.Steps {
+		step := map[string]any{"node": st.Node, "kind": st.Kind, "awaits_input": st.Awaits}
+		if st.Say != nil {
+			step["say"] = st.Say
+		}
+		steps = append(steps, step)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"steps":  steps,
+		"ended":  sim.Ended,
+		"result": sim.Result,
+		"status": sim.Status,
+	})
+}
+
 func (h *flowsHandler) update(w http.ResponseWriter, r *http.Request) {
 	raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	var body struct {

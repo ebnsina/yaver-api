@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/ebnsina/yaver-api/internal/domain"
+	"github.com/ebnsina/yaver-api/internal/flowengine"
 )
 
 type Service struct {
@@ -74,6 +75,21 @@ func (s *Service) UpdateSpec(ctx context.Context, orgID domain.OrgID, id domain.
 		return err
 	}
 	return s.repo.UpdateSpec(ctx, id, orgID, spec)
+}
+
+// Simulate dry-runs an IVR spec against a sequence of keypad inputs (digits or
+// "timeout") and returns the full trace + outcome — the builder's in-browser
+// simulator. Pure: no telephony, no credits, no persistence.
+func (s *Service) Simulate(spec []byte, inputs []string) (flowengine.Simulation, error) {
+	if err := validateIVR(spec); err != nil {
+		return flowengine.Simulation{}, err
+	}
+	var ivr domain.IVRSpec
+	if err := json.Unmarshal(spec, &ivr); err != nil {
+		return flowengine.Simulation{}, domain.ErrFlowInvalid
+	}
+	f := domain.Flow{Type: domain.FlowIVR, IVR: ivr}
+	return flowengine.NewIVR().Simulate(f, inputs), nil
 }
 
 // validateIVR ensures the spec parses and its entry node exists.

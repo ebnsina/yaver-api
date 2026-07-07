@@ -95,6 +95,8 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	// Flows (no-code builder).
 	mux.Handle("GET /v1/flows", ah.requireAuth(http.HandlerFunc(fh.list)))
 	mux.Handle("POST /v1/flows", ah.requireAuth(http.HandlerFunc(fh.create)))
+	mux.Handle("GET /v1/flows/templates", ah.requireAuth(http.HandlerFunc(fh.templates)))
+	mux.Handle("POST /v1/flows/simulate", ah.requireAuth(http.HandlerFunc(fh.simulate)))
 	mux.Handle("GET /v1/flows/{id}", ah.requireAuth(http.HandlerFunc(fh.get)))
 	mux.Handle("PUT /v1/flows/{id}", ah.requireAuth(http.HandlerFunc(fh.update)))
 
