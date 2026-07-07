@@ -43,6 +43,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgProv domain.Org
 	mux.HandleFunc("POST /v1/auth/logout", ah.logout)
 	mux.Handle("GET /v1/me", ah.requireAuth(http.HandlerFunc(ah.me)))
 	mux.Handle("GET /v1/calls", ah.requireAuth(http.HandlerFunc(ch.listCalls)))
+	mux.Handle("GET /v1/calls/{id}", ah.requireAuth(http.HandlerFunc(ch.getCall)))
 	mux.Handle("GET /v1/analytics/summary", ah.requireAuth(http.HandlerFunc(ch.summary)))
 
 	// Merchant ingest (X-API-Key resolves the org).
@@ -126,6 +127,39 @@ func (h *callsHandler) listCalls(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"calls": out})
+}
+
+type callDetailDTO struct {
+	ID             string `json:"id"`
+	Direction      string `json:"direction"`
+	Status         string `json:"status"`
+	Result         string `json:"result"`
+	FlowID         string `json:"flow_id"`
+	ProviderCallID string `json:"provider_call_id"`
+	CreatedAt      string `json:"created_at"`
+}
+
+// getCall returns one call, org-scoped (404 if not the caller's).
+func (h *callsHandler) getCall(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.Get(r.Context(), orgFromCtx(r), domain.CallID(r.PathValue("id")))
+	if errors.Is(err, domain.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if err != nil {
+		h.log.Error("get call", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	writeJSON(w, http.StatusOK, callDetailDTO{
+		ID:             string(c.ID),
+		Direction:      string(c.Direction),
+		Status:         string(c.Status),
+		Result:         c.Result,
+		FlowID:         string(c.FlowID),
+		ProviderCallID: string(c.ProviderCallID),
+		CreatedAt:      c.CreatedAt.Format(time.RFC3339),
+	})
 }
 
 // summary returns dashboard metrics for the org.

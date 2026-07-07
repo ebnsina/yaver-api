@@ -95,6 +95,28 @@ paths:
                 $ref: '#/components/schemas/CallList'
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/calls/{id}:
+    get:
+      operationId: getCall
+      summary: A single call (org-scoped)
+      tags: [calls]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Call detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallDetail'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/BadRequest' }
+
   /v1/analytics/summary:
     get:
       operationId: getSummary
@@ -348,6 +370,17 @@ components:
         calls:
           type: array
           items: { $ref: '#/components/schemas/Call' }
+    CallDetail:
+      type: object
+      required: [id, direction, status, result, flow_id, provider_call_id, created_at]
+      properties:
+        id: { type: string }
+        direction: { type: string }
+        status: { type: string }
+        result: { type: string }
+        flow_id: { type: string }
+        provider_call_id: { type: string }
+        created_at: { type: string, format: date-time }
     EventRequest:
       type: object
       required: [event_type, event_id]

@@ -38,6 +38,19 @@ func (s *Service) Summary(ctx context.Context, orgID domain.OrgID) (domain.CallS
 	return s.calls.Summary(ctx, orgID)
 }
 
+// Get returns a single call scoped to the org (ErrNotFound if it belongs to
+// another org, so nothing leaks).
+func (s *Service) Get(ctx context.Context, orgID domain.OrgID, id domain.CallID) (*domain.Call, error) {
+	c, err := s.calls.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if c.OrgID != orgID {
+		return nil, domain.ErrNotFound
+	}
+	return c, nil
+}
+
 // RunTestCall loads the named active flow, drives it with a simulated keypress
 // (the Phase 0 "no telco" path), persists the Call, and returns the outcome.
 func (s *Service) RunTestCall(ctx context.Context, orgID domain.OrgID, toPhone, digit, flowName string) (*domain.Outcome, *domain.Call, error) {
