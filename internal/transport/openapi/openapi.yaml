@@ -417,6 +417,22 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/settings/publishable-key:
+    post:
+      operationId: createPublishableKey
+      summary: Mint a publishable (yvr_pk_) key for the embeddable widget
+      tags: [settings]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Publishable key (shown once)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyResult'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/settings/api-keys:
     get:
       operationId: listApiKeys
@@ -613,10 +629,11 @@ components:
         api_key: { type: string }
     ApiKeyInfo:
       type: object
-      required: [prefix, name, created_at]
+      required: [prefix, name, kind, created_at]
       properties:
         prefix: { type: string }
         name: { type: string }
+        kind: { type: string, enum: [secret, publishable] }
         created_at: { type: string, format: date-time }
         last_used_at: { type: string, format: date-time, nullable: true }
     ApiKeyList:

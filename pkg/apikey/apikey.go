@@ -15,14 +15,21 @@ import (
 )
 
 const (
-	scheme    = "yvr_sk_"
-	prefixLen = len(scheme) + 8 // stored/indexed prefix
-	randLen   = 24              // bytes of entropy
+	SecretScheme      = "yvr_sk_" // server-side keys
+	PublishableScheme = "yvr_pk_" // embeddable (browser widget) keys
+	schemeLen         = len(SecretScheme)
+	prefixLen         = schemeLen + 8 // stored/indexed prefix (both schemes are 7 chars)
+	randLen           = 24            // bytes of entropy
 )
 
-// Generate returns (fullKey, lookupPrefix, secretHash). Show fullKey to the user
-// exactly once; persist prefix + hash.
-func Generate() (full, prefix string, hash []byte) {
+// Generate returns a secret key (fullKey, lookupPrefix, secretHash). Show fullKey
+// to the user exactly once; persist prefix + hash.
+func Generate() (full, prefix string, hash []byte) { return gen(SecretScheme) }
+
+// GeneratePublishable returns a publishable (yvr_pk_) key, safe to embed client-side.
+func GeneratePublishable() (full, prefix string, hash []byte) { return gen(PublishableScheme) }
+
+func gen(scheme string) (full, prefix string, hash []byte) {
 	b := make([]byte, randLen)
 	_, _ = rand.Read(b)
 	full = scheme + base64.RawURLEncoding.EncodeToString(b)
@@ -31,9 +38,10 @@ func Generate() (full, prefix string, hash []byte) {
 	return full, prefix, sum[:]
 }
 
-// Prefix derives the lookup prefix from a presented key. ok=false if malformed.
+// Prefix derives the lookup prefix from a presented key (either scheme).
+// ok=false if malformed.
 func Prefix(full string) (string, bool) {
-	if !strings.HasPrefix(full, scheme) || len(full) < prefixLen {
+	if !strings.HasPrefix(full, "yvr_") || len(full) < prefixLen {
 		return "", false
 	}
 	return full[:prefixLen], true

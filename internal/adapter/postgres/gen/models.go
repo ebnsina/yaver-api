@@ -19,6 +19,7 @@ type ApiKey struct {
 	Name       *string
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
+	Kind       string
 }
 
 type Call struct {

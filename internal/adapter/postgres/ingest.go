@@ -17,21 +17,21 @@ type APIKeyRepo struct{ q *gen.Queries }
 
 func NewAPIKeyRepo(pool *pgxpool.Pool) *APIKeyRepo { return &APIKeyRepo{q: gen.New(pool)} }
 
-func (r *APIKeyRepo) Create(ctx context.Context, id, orgID, prefix string, secretHash []byte, name string) error {
+func (r *APIKeyRepo) Create(ctx context.Context, id, orgID, prefix string, secretHash []byte, name, kind string) error {
 	return r.q.CreateAPIKey(ctx, gen.CreateAPIKeyParams{
-		ID: id, OrgID: orgID, Prefix: prefix, SecretHash: secretHash, Name: strPtr(name),
+		ID: id, OrgID: orgID, Prefix: prefix, SecretHash: secretHash, Name: strPtr(name), Kind: kind,
 	})
 }
 
-func (r *APIKeyRepo) ByPrefix(ctx context.Context, prefix string) (id, orgID string, secretHash []byte, found bool, err error) {
+func (r *APIKeyRepo) ByPrefix(ctx context.Context, prefix string) (id, orgID, kind string, secretHash []byte, found bool, err error) {
 	row, err := r.q.GetAPIKeyByPrefix(ctx, prefix)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", "", nil, false, nil
+		return "", "", "", nil, false, nil
 	}
 	if err != nil {
-		return "", "", nil, false, err
+		return "", "", "", nil, false, err
 	}
-	return row.ID, row.OrgID, row.SecretHash, true, nil
+	return row.ID, row.OrgID, row.Kind, row.SecretHash, true, nil
 }
 
 func (r *APIKeyRepo) Touch(ctx context.Context, id string) error {
@@ -48,6 +48,7 @@ func (r *APIKeyRepo) ListByOrg(ctx context.Context, orgID string) ([]domain.APIK
 		out = append(out, domain.APIKeyInfo{
 			Prefix:     row.Prefix,
 			Name:       deref(row.Name),
+			Kind:       row.Kind,
 			CreatedAt:  row.CreatedAt,
 			LastUsedAt: row.LastUsedAt,
 		})

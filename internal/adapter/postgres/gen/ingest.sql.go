@@ -11,8 +11,8 @@ import (
 )
 
 const createAPIKey = `-- name: CreateAPIKey :exec
-INSERT INTO api_keys (id, org_id, prefix, secret_hash, name)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO api_keys (id, org_id, prefix, secret_hash, name, kind)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type CreateAPIKeyParams struct {
@@ -21,6 +21,7 @@ type CreateAPIKeyParams struct {
 	Prefix     string
 	SecretHash []byte
 	Name       *string
+	Kind       string
 }
 
 func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) error {
@@ -30,24 +31,31 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) erro
 		arg.Prefix,
 		arg.SecretHash,
 		arg.Name,
+		arg.Kind,
 	)
 	return err
 }
 
 const getAPIKeyByPrefix = `-- name: GetAPIKeyByPrefix :one
-SELECT id, org_id, secret_hash FROM api_keys WHERE prefix = $1
+SELECT id, org_id, secret_hash, kind FROM api_keys WHERE prefix = $1
 `
 
 type GetAPIKeyByPrefixRow struct {
 	ID         string
 	OrgID      string
 	SecretHash []byte
+	Kind       string
 }
 
 func (q *Queries) GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIKeyByPrefixRow, error) {
 	row := q.db.QueryRow(ctx, getAPIKeyByPrefix, prefix)
 	var i GetAPIKeyByPrefixRow
-	err := row.Scan(&i.ID, &i.OrgID, &i.SecretHash)
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.SecretHash,
+		&i.Kind,
+	)
 	return i, err
 }
 
@@ -80,13 +88,14 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (strin
 }
 
 const listAPIKeysByOrg = `-- name: ListAPIKeysByOrg :many
-SELECT prefix, name, created_at, last_used_at
+SELECT prefix, name, kind, created_at, last_used_at
 FROM api_keys WHERE org_id = $1 ORDER BY created_at DESC
 `
 
 type ListAPIKeysByOrgRow struct {
 	Prefix     string
 	Name       *string
+	Kind       string
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
 }
@@ -103,6 +112,7 @@ func (q *Queries) ListAPIKeysByOrg(ctx context.Context, orgID string) ([]ListAPI
 		if err := rows.Scan(
 			&i.Prefix,
 			&i.Name,
+			&i.Kind,
 			&i.CreatedAt,
 			&i.LastUsedAt,
 		); err != nil {

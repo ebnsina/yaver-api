@@ -33,6 +33,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	cuh := &customersHandler{log: log, svc: custSvc}
 	cah := &campaignsHandler{log: log, svc: campSvc}
 	chh := &chatHandler{log: log, svc: chatSvc}
+	ph := &publicHandler{log: log, keys: keysSvc, chat: chatSvc}
 	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc}
 	wh := &webhookHandler{log: log, svc: webhooksSvc}
 
@@ -81,6 +82,11 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("PUT /v1/settings/org", ah.requireAuth(http.HandlerFunc(ah.renameOrg)))
 	mux.Handle("GET /v1/settings/api-keys", ah.requireAuth(http.HandlerFunc(ih.listKeys)))
 	mux.Handle("POST /v1/settings/api-keys", ah.requireAuth(http.HandlerFunc(ih.mintKey)))
+	mux.Handle("POST /v1/settings/publishable-key", ah.requireAuth(http.HandlerFunc(ih.mintPublishableKey)))
+
+	// Public widget surface (cross-origin, publishable-key auth).
+	mux.Handle("/public/chat/messages", cors(http.HandlerFunc(ph.chatSend)))
+	mux.Handle("GET /widget.js", cors(http.HandlerFunc(ph.widget)))
 	mux.Handle("GET /v1/settings/webhook", ah.requireAuth(http.HandlerFunc(wh.getEndpoint)))
 	mux.Handle("POST /v1/settings/webhook", ah.requireAuth(http.HandlerFunc(wh.setEndpoint)))
 	mux.Handle("POST /v1/dev/test-call", ah.requireAuth(http.HandlerFunc(ch.testCall)))

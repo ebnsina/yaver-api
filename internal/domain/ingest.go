@@ -9,6 +9,7 @@ import (
 type APIKeyInfo struct {
 	Prefix     string
 	Name       string
+	Kind       string // "secret" | "publishable"
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
 }
@@ -25,9 +26,9 @@ type IngestEvent struct {
 
 // APIKeyRepo persists and looks up merchant API keys.
 type APIKeyRepo interface {
-	Create(ctx context.Context, id, orgID, prefix string, secretHash []byte, name string) error
+	Create(ctx context.Context, id, orgID, prefix string, secretHash []byte, name, kind string) error
 	// ByPrefix loads a key by its lookup prefix. found=false if absent.
-	ByPrefix(ctx context.Context, prefix string) (id, orgID string, secretHash []byte, found bool, err error)
+	ByPrefix(ctx context.Context, prefix string) (id, orgID, kind string, secretHash []byte, found bool, err error)
 	Touch(ctx context.Context, id string) error
 	ListByOrg(ctx context.Context, orgID string) ([]APIKeyInfo, error)
 }

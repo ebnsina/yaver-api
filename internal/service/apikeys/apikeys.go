@@ -15,10 +15,19 @@ type Service struct {
 
 func New(repo domain.APIKeyRepo) *Service { return &Service{repo: repo} }
 
-// Mint creates a key for an org and returns the full key exactly once.
+// Mint creates a secret key for an org and returns the full key exactly once.
 func (s *Service) Mint(ctx context.Context, orgID domain.OrgID, name string) (fullKey string, err error) {
 	full, prefix, hash := apikey.Generate()
-	if err := s.repo.Create(ctx, id.New("key"), string(orgID), prefix, hash, name); err != nil {
+	if err := s.repo.Create(ctx, id.New("key"), string(orgID), prefix, hash, name, "secret"); err != nil {
+		return "", err
+	}
+	return full, nil
+}
+
+// MintPublishable creates a publishable (yvr_pk_) key, safe to embed client-side.
+func (s *Service) MintPublishable(ctx context.Context, orgID domain.OrgID, name string) (fullKey string, err error) {
+	full, prefix, hash := apikey.GeneratePublishable()
+	if err := s.repo.Create(ctx, id.New("key"), string(orgID), prefix, hash, name, "publishable"); err != nil {
 		return "", err
 	}
 	return full, nil
@@ -29,20 +38,20 @@ func (s *Service) List(ctx context.Context, orgID domain.OrgID) ([]domain.APIKey
 	return s.repo.ListByOrg(ctx, string(orgID))
 }
 
-// Authenticate resolves a presented key to its org. ok=false when the key is
-// malformed, unknown, or the hash doesn't match.
-func (s *Service) Authenticate(ctx context.Context, presented string) (orgID domain.OrgID, ok bool, err error) {
+// Authenticate resolves a presented key to its org and kind. ok=false when the
+// key is malformed, unknown, or the hash doesn't match.
+func (s *Service) Authenticate(ctx context.Context, presented string) (orgID domain.OrgID, kind string, ok bool, err error) {
 	prefix, valid := apikey.Prefix(presented)
 	if !valid {
-		return "", false, nil
+		return "", "", false, nil
 	}
-	keyID, org, hash, found, err := s.repo.ByPrefix(ctx, prefix)
+	keyID, org, k, hash, found, err := s.repo.ByPrefix(ctx, prefix)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	if !found || !apikey.Verify(presented, hash) {
-		return "", false, nil
+		return "", "", false, nil
 	}
 	_ = s.repo.Touch(ctx, keyID) // best-effort last-used
-	return domain.OrgID(org), true, nil
+	return domain.OrgID(org), k, true, nil
 }

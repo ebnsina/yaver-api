@@ -22,16 +22,18 @@ type ingestHandler struct {
 	ingest *ingest.Service
 }
 
-// requireAPIKey authenticates X-API-Key and injects the org.
+// requireAPIKey authenticates a secret X-API-Key and injects the org.
+// Publishable (yvr_pk_) keys are rejected here — they only work on the public
+// widget endpoint, never on server-side routes like event ingestion.
 func (h *ingestHandler) requireAPIKey(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		org, ok, err := h.keys.Authenticate(r.Context(), r.Header.Get("X-API-Key"))
+		org, kind, ok, err := h.keys.Authenticate(r.Context(), r.Header.Get("X-API-Key"))
 		if err != nil {
 			h.log.Error("apikey auth", "err", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 			return
 		}
-		if !ok {
+		if !ok || kind != "secret" {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid api key"})
 			return
 		}
@@ -88,6 +90,7 @@ func (h *ingestHandler) postEvent(w http.ResponseWriter, r *http.Request) {
 type apiKeyInfoDTO struct {
 	Prefix     string  `json:"prefix"`
 	Name       string  `json:"name"`
+	Kind       string  `json:"kind"`
 	CreatedAt  string  `json:"created_at"`
 	LastUsedAt *string `json:"last_used_at"`
 }
@@ -107,16 +110,27 @@ func (h *ingestHandler) listKeys(w http.ResponseWriter, r *http.Request) {
 			s := k.LastUsedAt.Format(time.RFC3339)
 			last = &s
 		}
-		out = append(out, apiKeyInfoDTO{Prefix: k.Prefix, Name: k.Name, CreatedAt: k.CreatedAt.Format(time.RFC3339), LastUsedAt: last})
+		out = append(out, apiKeyInfoDTO{Prefix: k.Prefix, Name: k.Name, Kind: k.Kind, CreatedAt: k.CreatedAt.Format(time.RFC3339), LastUsedAt: last})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"keys": out})
 }
 
-// mintKey creates an API key for the authenticated user's org and returns it once.
+// mintKey creates a secret API key for the org and returns it once.
 func (h *ingestHandler) mintKey(w http.ResponseWriter, r *http.Request) {
 	full, err := h.keys.Mint(r.Context(), orgFromCtx(r), "dashboard")
 	if err != nil {
 		h.log.Error("mint key", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"api_key": full})
+}
+
+// mintPublishableKey creates a publishable (yvr_pk_) key for the widget.
+func (h *ingestHandler) mintPublishableKey(w http.ResponseWriter, r *http.Request) {
+	full, err := h.keys.MintPublishable(r.Context(), orgFromCtx(r), "widget")
+	if err != nil {
+		h.log.Error("mint publishable key", "err", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
