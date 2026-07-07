@@ -25,6 +25,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/apikeys"
 	"github.com/ebnsina/yaver-api/internal/service/auth"
 	"github.com/ebnsina/yaver-api/internal/service/calls"
+	"github.com/ebnsina/yaver-api/internal/service/customers"
 	"github.com/ebnsina/yaver-api/internal/service/flows"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
 	"github.com/ebnsina/yaver-api/internal/service/webhooks"
@@ -86,14 +87,16 @@ func main() {
 	}
 
 	keysSvc := apikeys.New(postgres.NewAPIKeyRepo(pool))
-	ingestSvc := ingest.New(postgres.NewEventRepo(pool), flowRepo, orch)
+	custRepo := postgres.NewCustomerRepo(pool)
+	custSvc := customers.New(custRepo)
+	ingestSvc := ingest.New(postgres.NewEventRepo(pool), custRepo, flowRepo, orch)
 
 	// Webhook dispatcher: drains the outbox and delivers, on its own loop.
 	webhooksSvc := webhooks.New(postgres.NewWebhookRepo(pool), cipher, log)
 	go webhooksSvc.Run(context.Background())
 
 	orgProv := postgres.NewOrgRepo(pool)
-	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, keysSvc, ingestSvc, webhooksSvc, orch)
+	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, keysSvc, ingestSvc, webhooksSvc, orch)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,

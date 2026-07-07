@@ -11,21 +11,24 @@ import (
 )
 
 type Service struct {
-	events domain.EventRepo
-	flows  domain.FlowRepo
-	orch   domain.Orchestrator
+	events    domain.EventRepo
+	customers domain.CustomerRepo
+	flows     domain.FlowRepo
+	orch      domain.Orchestrator
 }
 
-func New(events domain.EventRepo, flows domain.FlowRepo, orch domain.Orchestrator) *Service {
-	return &Service{events: events, flows: flows, orch: orch}
+func New(events domain.EventRepo, customers domain.CustomerRepo, flows domain.FlowRepo, orch domain.Orchestrator) *Service {
+	return &Service{events: events, customers: customers, flows: flows, orch: orch}
 }
 
 // Event is the normalized-at-transport input.
 type Event struct {
-	Type       string
-	ExternalID string
-	Phone      string // raw; normalized here
-	Payload    []byte
+	Type         string
+	ExternalID   string
+	Phone        string // raw; normalized here
+	CustomerName string
+	CustomerRef  string // merchant-side customer id
+	Payload      []byte
 }
 
 // Accept stores the event idempotently and, when it's a new order_placed with a
@@ -55,7 +58,16 @@ func (s *Service) Accept(ctx context.Context, orgID domain.OrgID, ev Event) (eve
 		return "", true, nil // duplicate — idempotent no-op
 	}
 
-	if ev.Type == "order_placed" && e164 != "" {
+	// Upsert the customer and read their DND flag.
+	var dnd bool
+	if e164 != "" {
+		if _, dnd, err = s.customers.Upsert(ctx, orgID, e164, ev.CustomerName, ev.CustomerRef); err != nil {
+			return "", false, err
+		}
+	}
+
+	// Trigger a confirmation call — unless the customer is on DND.
+	if ev.Type == "order_placed" && e164 != "" && !dnd {
 		var flowID domain.FlowID
 		if f, found, ferr := s.flows.GetActiveFlow(ctx, orgID, "order_confirm"); ferr == nil && found {
 			flowID = f.ID

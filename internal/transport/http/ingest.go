@@ -44,7 +44,9 @@ type eventBody struct {
 	EventType string `json:"event_type"`
 	EventID   string `json:"event_id"`
 	Customer  struct {
-		Phone string `json:"phone"`
+		Phone      string `json:"phone"`
+		Name       string `json:"name"`
+		ExternalID string `json:"external_id"`
 	} `json:"customer"`
 }
 
@@ -63,10 +65,12 @@ func (h *ingestHandler) postEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	eventID, dup, err := h.ingest.Accept(r.Context(), org, ingest.Event{
-		Type:       body.EventType,
-		ExternalID: body.EventID,
-		Phone:      body.Customer.Phone,
-		Payload:    raw,
+		Type:         body.EventType,
+		ExternalID:   body.EventID,
+		Phone:        body.Customer.Phone,
+		CustomerName: body.Customer.Name,
+		CustomerRef:  body.Customer.ExternalID,
+		Payload:      raw,
 	})
 	switch {
 	case errors.Is(err, domain.ErrInvalidPhone):

@@ -32,6 +32,16 @@ type Call struct {
 	CreatedAt      time.Time
 }
 
+type Customer struct {
+	ID         string
+	OrgID      string
+	Phone      string
+	Name       *string
+	ExternalID *string
+	Dnd        bool
+	CreatedAt  time.Time
+}
+
 type Event struct {
 	ID              string
 	OrgID           string

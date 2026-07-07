@@ -13,6 +13,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/apikeys"
 	"github.com/ebnsina/yaver-api/internal/service/auth"
 	"github.com/ebnsina/yaver-api/internal/service/calls"
+	"github.com/ebnsina/yaver-api/internal/service/customers"
 	"github.com/ebnsina/yaver-api/internal/service/flows"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
 	"github.com/ebnsina/yaver-api/internal/service/webhooks"
@@ -22,11 +23,12 @@ import (
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
 // arrive with rate-limit in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
+func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
 	dev := env == "dev"
 	ah := &authHandler{log: log, svc: authSvc, orgs: orgStore, secure: !dev}
 	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
 	fh := &flowsHandler{log: log, svc: flowsSvc}
+	cuh := &customersHandler{log: log, svc: custSvc}
 	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc}
 	wh := &webhookHandler{log: log, svc: webhooksSvc}
 
@@ -47,6 +49,11 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("GET /v1/calls", ah.requireAuth(http.HandlerFunc(ch.listCalls)))
 	mux.Handle("GET /v1/calls/{id}", ah.requireAuth(http.HandlerFunc(ch.getCall)))
 	mux.Handle("GET /v1/analytics/summary", ah.requireAuth(http.HandlerFunc(ch.summary)))
+
+	// Customers + DND.
+	mux.Handle("GET /v1/customers", ah.requireAuth(http.HandlerFunc(cuh.list)))
+	mux.Handle("POST /v1/customers/{id}/dnd", ah.requireAuth(cuh.setDND(true)))
+	mux.Handle("DELETE /v1/customers/{id}/dnd", ah.requireAuth(cuh.setDND(false)))
 
 	// Flows (no-code builder).
 	mux.Handle("GET /v1/flows", ah.requireAuth(http.HandlerFunc(fh.list)))

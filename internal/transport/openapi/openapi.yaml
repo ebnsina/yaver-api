@@ -117,6 +117,54 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/BadRequest' }
 
+  /v1/customers:
+    get:
+      operationId: listCustomers
+      summary: The org's customers
+      tags: [customers]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Customers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/customers/{id}/dnd:
+    post:
+      operationId: setDnd
+      summary: Put a customer on do-not-disturb (skip calls)
+      tags: [customers]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: DND set
+          content:
+            application/json:
+              schema: { type: object, properties: { dnd: { type: boolean } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      operationId: clearDnd
+      summary: Remove a customer from do-not-disturb
+      tags: [customers]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: DND cleared
+          content:
+            application/json:
+              schema: { type: object, properties: { dnd: { type: boolean } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/flows:
     get:
       operationId: listFlows
@@ -477,6 +525,22 @@ components:
       required: [secret]
       properties:
         secret: { type: string }
+    Customer:
+      type: object
+      required: [id, phone, name, dnd, created_at]
+      properties:
+        id: { type: string }
+        phone: { type: string }
+        name: { type: string }
+        dnd: { type: boolean }
+        created_at: { type: string, format: date-time }
+    CustomerList:
+      type: object
+      required: [customers]
+      properties:
+        customers:
+          type: array
+          items: { $ref: '#/components/schemas/Customer' }
     FlowSummary:
       type: object
       required: [id, name, version, channel, type, active]
