@@ -117,6 +117,63 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/BadRequest' }
 
+  /v1/campaigns:
+    get:
+      operationId: listCampaigns
+      summary: The org's campaigns
+      tags: [campaigns]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Campaigns
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: createCampaign
+      summary: Create a draft campaign
+      tags: [campaigns]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { type: object, required: [id], properties: { id: { type: string } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/campaigns/{id}/start:
+    post:
+      operationId: startCampaign
+      summary: Dispatch calls to all callable customers
+      tags: [campaigns]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Dispatched
+          content:
+            application/json:
+              schema: { type: object, required: [queued], properties: { queued: { type: integer } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/BadRequest' }
+
   /v1/customers:
     get:
       operationId: listCustomers
@@ -525,6 +582,23 @@ components:
       required: [secret]
       properties:
         secret: { type: string }
+    Campaign:
+      type: object
+      required: [id, name, status, target_count, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string }
+        target_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time, nullable: true }
+    CampaignList:
+      type: object
+      required: [campaigns]
+      properties:
+        campaigns:
+          type: array
+          items: { $ref: '#/components/schemas/Campaign' }
     Customer:
       type: object
       required: [id, phone, name, dnd, created_at]

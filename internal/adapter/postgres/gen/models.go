@@ -32,6 +32,16 @@ type Call struct {
 	CreatedAt      time.Time
 }
 
+type Campaign struct {
+	ID          string
+	OrgID       string
+	Name        string
+	Status      string
+	TargetCount int32
+	CreatedAt   time.Time
+	StartedAt   *time.Time
+}
+
 type Customer struct {
 	ID         string
 	OrgID      string
