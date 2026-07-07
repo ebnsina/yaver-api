@@ -1,6 +1,7 @@
-// Command yaver is the single API binary. In Phase 0 it serves HTTP and runs
-// the flow → mock-provider → outcome path; embedded Hatchet workers, Postgres,
-// and the LiveKit adapter are wired in as that infra lands.
+// Command yaver is the single API binary. In Phase 0 it serves HTTP, runs
+// phone-OTP auth (Postgres), and the flow → mock-provider → outcome path via an
+// in-process orchestrator. The Hatchet adapter and the LiveKit voice adapter
+// slot in behind their interfaces as that infra lands.
 package main
 
 import (
@@ -14,9 +15,13 @@ import (
 	"time"
 
 	"github.com/ebnsina/yaver-api/internal/adapter/memory"
+	orchlocal "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/local"
+	"github.com/ebnsina/yaver-api/internal/adapter/postgres"
 	voicemock "github.com/ebnsina/yaver-api/internal/adapter/voice/mock"
 	"github.com/ebnsina/yaver-api/internal/platform/clock"
 	"github.com/ebnsina/yaver-api/internal/platform/config"
+	"github.com/ebnsina/yaver-api/internal/platform/db"
+	"github.com/ebnsina/yaver-api/internal/service/auth"
 	"github.com/ebnsina/yaver-api/internal/service/calls"
 	httptransport "github.com/ebnsina/yaver-api/internal/transport/http"
 )
@@ -29,20 +34,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Wire dependencies (ports → adapters). Swap memory/mock for
-	// postgres/livekit without touching the service layer.
-	provider := voicemock.New(log)
-	callRepo := memory.NewCallRepo()
-	callsSvc := calls.New(provider, callRepo, clock.Real{})
+	// DB pool (lazy: dials on first query, so boot doesn't require a live DB).
+	pool, err := db.Open(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		log.Error("db pool", "err", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
 
-	handler := httptransport.New(log, callsSvc)
+	// Wire ports → adapters. Swap memory/mock/local for postgres/livekit/hatchet
+	// without touching the service layer.
+	authSvc := auth.New(postgres.NewAuthRepo(pool), clock.Real{}, cfg.AuthSecret, cfg.Env)
+	callsSvc := calls.New(voicemock.New(log), memory.NewCallRepo(), clock.Real{})
+	orch := orchlocal.New(log, 8, callsSvc.PlaceCall)
+	defer orch.Shutdown()
+
+	handler := httptransport.New(log, cfg.Env, authSvc, callsSvc, orch)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	// Graceful shutdown.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 

@@ -8,4 +8,6 @@ var (
 	ErrInsufficientCredits = errors.New("insufficient credits")
 	ErrInvalidPhone        = errors.New("invalid phone number")
 	ErrFlowInvalid         = errors.New("invalid flow spec")
+	ErrInvalidOTP          = errors.New("invalid or expired code")
+	ErrUnauthorized        = errors.New("unauthorized")
 )

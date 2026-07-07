@@ -18,6 +18,20 @@ type ChatTransport interface {
 	StartSession(ctx context.Context, orgID OrgID, flow Flow) (string, error)
 }
 
+// PlaceCallInput is the payload for the place_call job.
+type PlaceCallInput struct {
+	OrgID   OrgID
+	ToPhone string
+	FlowID  FlowID
+}
+
+// Orchestrator abstracts the durable-job engine. The local dispatcher backs
+// Phase 0; the Hatchet adapter (fairness key = merchant_id, retries, cron) slots
+// in behind this same interface once the engine is running.
+type Orchestrator interface {
+	EnqueuePlaceCall(ctx context.Context, in PlaceCallInput) error
+}
+
 // CallRepo persists voice interactions.
 type CallRepo interface {
 	Create(ctx context.Context, c *Call) error

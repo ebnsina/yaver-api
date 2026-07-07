@@ -7,30 +7,40 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/ebnsina/yaver-api/internal/domain"
+	"github.com/ebnsina/yaver-api/internal/service/auth"
 	"github.com/ebnsina/yaver-api/internal/service/calls"
 	"github.com/ebnsina/yaver-api/pkg/phone"
 )
 
-type Server struct {
-	log   *slog.Logger
-	calls *callsHandler
-}
+// New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
+// arrive with rate-limit / API keys in Phase 1.)
+func New(log *slog.Logger, env string, authSvc *auth.Service, callsSvc *calls.Service, orch domain.Orchestrator) http.Handler {
+	ah := &authHandler{log: log, svc: authSvc, secure: env != "dev"}
+	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
 
-// New wires the router. (Phase 0 uses net/http ServeMux; chi + middleware
-// arrive with auth/rate-limit in Phase 1.)
-func New(log *slog.Logger, callsSvc *calls.Service) http.Handler {
-	ch := &callsHandler{log: log, svc: callsSvc}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+
+	// Auth (phone-OTP + cookie sessions).
+	mux.HandleFunc("POST /v1/auth/otp/request", ah.requestOTP)
+	mux.HandleFunc("POST /v1/auth/otp/verify", ah.verifyOTP)
+	mux.HandleFunc("POST /v1/auth/logout", ah.logout)
+	mux.Handle("GET /v1/me", ah.requireAuth(http.HandlerFunc(ah.me)))
+
+	// Dev endpoints (no telco): simulate a full flow, or enqueue place_call.
 	mux.HandleFunc("POST /v1/dev/test-call", ch.testCall)
+	mux.HandleFunc("POST /v1/dev/place-call", ch.placeCall)
+
 	return logRequests(log, mux)
 }
 
 type callsHandler struct {
-	log *slog.Logger
-	svc *calls.Service
+	log  *slog.Logger
+	svc  *calls.Service
+	orch domain.Orchestrator
 }
 
 type testCallRequest struct {
@@ -39,7 +49,7 @@ type testCallRequest struct {
 }
 
 // testCall runs the order-confirmation IVR against the mock provider with a
-// simulated keypress — no telephony. Proves the flow → outcome path end to end.
+// simulated keypress — no telephony. Proves the flow → outcome path.
 func (h *callsHandler) testCall(w http.ResponseWriter, r *http.Request) {
 	var req testCallRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -54,18 +64,38 @@ func (h *callsHandler) testCall(w http.ResponseWriter, r *http.Request) {
 	if req.Digit == "" {
 		req.Digit = "1"
 	}
-
 	out, call, err := h.svc.RunTestCall(r.Context(), "org_demo", e164, req.Digit, demoOrderConfirmFlow())
 	if err != nil {
 		h.log.Error("test-call failed", "err", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"call_id": call.ID,
-		"status":  out.Status,
-		"result":  out.Result,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"call_id": call.ID, "status": out.Status, "result": out.Result})
+}
+
+// placeCall enqueues a place_call job through the orchestrator (async path).
+func (h *callsHandler) placeCall(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	e164, err := phone.NormalizeBD(req.Phone)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid phone"})
+		return
+	}
+	if err := h.orch.EnqueuePlaceCall(r.Context(), domain.PlaceCallInput{
+		OrgID:   "org_demo",
+		ToPhone: e164,
+		FlowID:  "flow_demo_order_confirm",
+	}); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

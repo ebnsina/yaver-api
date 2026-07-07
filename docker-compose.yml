@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: yaver
+      POSTGRES_PASSWORD: yaver
+      POSTGRES_DB: yaver
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yaver"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Hatchet (self-hosted, lite) — the durable orchestrator. Wired in the next
+  # step; until then the app uses the in-process local orchestrator. Pin the
+  # engine + Go SDK versions when enabling (the Go SDK was rewritten in 2026).
+  # hatchet-lite:
+  #   image: ghcr.io/hatchet-dev/hatchet/hatchet-lite:latest
+  #   depends_on: [postgres]
+  #   ports: ["8888:8888"]   # dashboard
+  #   environment:
+  #     DATABASE_URL: postgres://yaver:yaver@postgres:5432/yaver?sslmode=disable
+
+volumes:
+  pgdata:

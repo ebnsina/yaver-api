@@ -22,6 +22,27 @@ func New(provider domain.VoiceProvider, repo domain.CallRepo, clock domain.Clock
 	return &Service{ivr: flowengine.NewIVR(), provider: provider, repo: repo, clock: clock}
 }
 
+// PlaceCall is the place_call job handler: it dials via the VoiceProvider and
+// records a queued Call. (Flow attachment + live leg events land in Phase 1;
+// here it demonstrates the orchestrated path.) Idempotency guards come with the
+// Postgres repo — the handler is written to be safe under at-least-once.
+func (s *Service) PlaceCall(ctx context.Context, in domain.PlaceCallInput) error {
+	pid, err := s.provider.PlaceCall(ctx, domain.CallRequest{OrgID: in.OrgID, ToPhone: in.ToPhone})
+	if err != nil {
+		return err
+	}
+	call := &domain.Call{
+		ID:        domain.CallID(id.New("call")),
+		OrgID:     in.OrgID,
+		FlowID:    in.FlowID,
+		Direction: domain.Outbound,
+		Status:    domain.StatusQueued,
+		CreatedAt: s.clock.Now(),
+	}
+	_ = pid // stored on the call in Phase 1 (provider_call_id column)
+	return s.repo.Create(ctx, call)
+}
+
 // RunTestCall drives a full IVR interaction with a simulated keypress — the
 // Phase 0 "flow logic, no telco" path. It places the call via the (mock)
 // provider, advances the engine, persists the Call, and returns the outcome.

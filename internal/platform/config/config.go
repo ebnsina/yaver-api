@@ -13,8 +13,10 @@ import (
 )
 
 type Config struct {
-	Env  string // "dev" | "staging" | "prod"
-	Port string
+	Env         string // "dev" | "staging" | "prod"
+	Port        string
+	DatabaseURL string
+	AuthSecret  string // HMAC key for OTP hashing (min 32 bytes recommended)
 }
 
 func Load() (Config, error) {
@@ -28,8 +30,10 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		Env:  req("YAVER_ENV"),
-		Port: req("YAVER_PORT"),
+		Env:         req("YAVER_ENV"),
+		Port:        req("YAVER_PORT"),
+		DatabaseURL: req("YAVER_DATABASE_URL"),
+		AuthSecret:  req("YAVER_AUTH_SECRET"),
 	}
 
 	if len(missing) > 0 {
