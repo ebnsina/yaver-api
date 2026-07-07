@@ -14,9 +14,11 @@ import (
 	"syscall"
 	"time"
 
+	hatchetorch "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/hatchet"
 	orchlocal "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/local"
 	"github.com/ebnsina/yaver-api/internal/adapter/postgres"
 	voicemock "github.com/ebnsina/yaver-api/internal/adapter/voice/mock"
+	"github.com/ebnsina/yaver-api/internal/domain"
 	"github.com/ebnsina/yaver-api/internal/platform/clock"
 	"github.com/ebnsina/yaver-api/internal/platform/config"
 	"github.com/ebnsina/yaver-api/internal/platform/db"
@@ -48,8 +50,31 @@ func main() {
 	flowRepo := postgres.NewFlowRepo(pool)
 	authSvc := auth.New(postgres.NewAuthRepo(pool), clock.Real{}, cfg.AuthSecret, cfg.Env)
 	callsSvc := calls.New(voicemock.New(log), postgres.NewCallRepo(pool), flowRepo, clock.Real{})
-	orch := orchlocal.New(log, 8, callsSvc.PlaceCall)
-	defer orch.Shutdown()
+
+	// Orchestrator: Hatchet (durable, fairness-keyed) or the in-process local
+	// dispatcher. Both satisfy domain.Orchestrator.
+	var orch domain.Orchestrator
+	switch cfg.Orchestrator {
+	case "hatchet":
+		ho, err := hatchetorch.New(callsSvc.PlaceCall)
+		if err != nil {
+			log.Error("hatchet client", "err", err)
+			os.Exit(1)
+		}
+		go func() {
+			if err := ho.StartWorker(context.Background()); err != nil {
+				log.Error("hatchet worker stopped", "err", err)
+			}
+		}()
+		orch = ho
+		log.Info("orchestrator: hatchet")
+	default:
+		lo := orchlocal.New(log, 8, callsSvc.PlaceCall)
+		defer lo.Shutdown()
+		orch = lo
+		log.Info("orchestrator: local")
+	}
+
 	keysSvc := apikeys.New(postgres.NewAPIKeyRepo(pool))
 	ingestSvc := ingest.New(postgres.NewEventRepo(pool), flowRepo, orch)
 
