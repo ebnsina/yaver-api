@@ -14,6 +14,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/auth"
 	"github.com/ebnsina/yaver-api/internal/service/calls"
 	"github.com/ebnsina/yaver-api/internal/service/campaigns"
+	"github.com/ebnsina/yaver-api/internal/service/chat"
 	"github.com/ebnsina/yaver-api/internal/service/customers"
 	"github.com/ebnsina/yaver-api/internal/service/flows"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
@@ -24,13 +25,14 @@ import (
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
 // arrive with rate-limit in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
+func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
 	dev := env == "dev"
 	ah := &authHandler{log: log, svc: authSvc, orgs: orgStore, secure: !dev}
 	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
 	fh := &flowsHandler{log: log, svc: flowsSvc}
 	cuh := &customersHandler{log: log, svc: custSvc}
 	cah := &campaignsHandler{log: log, svc: campSvc}
+	chh := &chatHandler{log: log, svc: chatSvc}
 	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc}
 	wh := &webhookHandler{log: log, svc: webhooksSvc}
 
@@ -56,6 +58,11 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("GET /v1/customers", ah.requireAuth(http.HandlerFunc(cuh.list)))
 	mux.Handle("POST /v1/customers/{id}/dnd", ah.requireAuth(cuh.setDND(true)))
 	mux.Handle("DELETE /v1/customers/{id}/dnd", ah.requireAuth(cuh.setDND(false)))
+
+	// Chat channel.
+	mux.Handle("POST /v1/chat/messages", ah.requireAuth(http.HandlerFunc(chh.send)))
+	mux.Handle("GET /v1/chat/conversations", ah.requireAuth(http.HandlerFunc(chh.list)))
+	mux.Handle("GET /v1/chat/conversations/{id}", ah.requireAuth(http.HandlerFunc(chh.messages)))
 
 	// Campaigns (bulk outbound).
 	mux.Handle("GET /v1/campaigns", ah.requireAuth(http.HandlerFunc(cah.list)))

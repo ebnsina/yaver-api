@@ -42,6 +42,16 @@ type Campaign struct {
 	StartedAt   *time.Time
 }
 
+type Conversation struct {
+	ID         string
+	OrgID      string
+	Channel    string
+	CustomerID *string
+	Status     string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 type Customer struct {
 	ID         string
 	OrgID      string
@@ -73,6 +83,14 @@ type Flow struct {
 	Spec      []byte
 	IsActive  bool
 	CreatedAt time.Time
+}
+
+type Message struct {
+	ID             string
+	ConversationID string
+	Role           string
+	Content        string
+	CreatedAt      time.Time
 }
 
 type Org struct {

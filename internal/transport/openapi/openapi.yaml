@@ -117,6 +117,72 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/BadRequest' }
 
+  /v1/chat/messages:
+    post:
+      operationId: sendChatMessage
+      summary: Send a message and get the assistant's reply
+      tags: [chat]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                conversation_id: { type: string, description: Omit to start a new conversation }
+                text: { type: string }
+      responses:
+        '200':
+          description: Reply
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conversation_id, reply]
+                properties:
+                  conversation_id: { type: string }
+                  reply: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/chat/conversations:
+    get:
+      operationId: listConversations
+      summary: The org's chat conversations
+      tags: [chat]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Conversations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/chat/conversations/{id}:
+    get:
+      operationId: getConversation
+      summary: A conversation's messages
+      tags: [chat]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/BadRequest' }
+
   /v1/campaigns:
     get:
       operationId: listCampaigns
@@ -582,6 +648,36 @@ components:
       required: [secret]
       properties:
         secret: { type: string }
+    Conversation:
+      type: object
+      required: [id, status, last_message, message_count, updated_at]
+      properties:
+        id: { type: string }
+        status: { type: string }
+        last_message: { type: string }
+        message_count: { type: integer }
+        updated_at: { type: string, format: date-time }
+    ConversationList:
+      type: object
+      required: [conversations]
+      properties:
+        conversations:
+          type: array
+          items: { $ref: '#/components/schemas/Conversation' }
+    ChatMessage:
+      type: object
+      required: [role, content, created_at]
+      properties:
+        role: { type: string, enum: [user, assistant, system] }
+        content: { type: string }
+        created_at: { type: string, format: date-time }
+    MessageList:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items: { $ref: '#/components/schemas/ChatMessage' }
     Campaign:
       type: object
       required: [id, name, status, target_count, created_at]

@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	chatbuiltin "github.com/ebnsina/yaver-api/internal/adapter/chat/builtin"
 	hatchetorch "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/hatchet"
 	orchlocal "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/local"
 	"github.com/ebnsina/yaver-api/internal/adapter/postgres"
@@ -26,6 +27,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/auth"
 	"github.com/ebnsina/yaver-api/internal/service/calls"
 	"github.com/ebnsina/yaver-api/internal/service/campaigns"
+	"github.com/ebnsina/yaver-api/internal/service/chat"
 	"github.com/ebnsina/yaver-api/internal/service/customers"
 	"github.com/ebnsina/yaver-api/internal/service/flows"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
@@ -93,12 +95,23 @@ func main() {
 	campSvc := campaigns.New(postgres.NewCampaignRepo(pool), custRepo, flowRepo, orch)
 	ingestSvc := ingest.New(postgres.NewEventRepo(pool), custRepo, flowRepo, orch)
 
+	// Chat channel — provider-agnostic model behind domain.ChatModel.
+	var chatModel domain.ChatModel
+	switch cfg.ChatProvider {
+	case "builtin":
+		chatModel = chatbuiltin.New()
+	default:
+		log.Error("unsupported YAVER_CHAT_PROVIDER (only 'builtin' is implemented)", "value", cfg.ChatProvider)
+		os.Exit(1)
+	}
+	chatSvc := chat.New(postgres.NewChatRepo(pool), chatModel)
+
 	// Webhook dispatcher: drains the outbox and delivers, on its own loop.
 	webhooksSvc := webhooks.New(postgres.NewWebhookRepo(pool), cipher, log)
 	go webhooksSvc.Run(context.Background())
 
 	orgProv := postgres.NewOrgRepo(pool)
-	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, keysSvc, ingestSvc, webhooksSvc, orch)
+	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, keysSvc, ingestSvc, webhooksSvc, orch)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,

@@ -19,6 +19,7 @@ type Config struct {
 	AuthSecret    string // HMAC key for OTP hashing (min 32 bytes recommended)
 	Orchestrator  string // "local" | "hatchet"
 	EncryptionKey string // base64 32-byte AES-GCM master key (secrets at rest)
+	ChatProvider  string // "builtin" | "openai" | "anthropic" — provider-agnostic AI seam
 }
 
 func Load() (Config, error) {
@@ -38,6 +39,7 @@ func Load() (Config, error) {
 		AuthSecret:    req("YAVER_AUTH_SECRET"),
 		Orchestrator:  req("YAVER_ORCHESTRATOR"),
 		EncryptionKey: req("YAVER_ENCRYPTION_KEY"),
+		ChatProvider:  req("YAVER_CHAT_PROVIDER"),
 	}
 
 	if len(missing) > 0 {
