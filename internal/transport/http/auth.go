@@ -17,12 +17,15 @@ const cookieName = "yaver_session"
 
 type ctxKey int
 
-const userKey ctxKey = 0
+const (
+	userKey   ctxKey = 0
+	orgObjKey ctxKey = 2 // domain.Org (orgKey=1 holds the OrgID, set by both auth + api-key)
+)
 
 type authHandler struct {
 	log    *slog.Logger
 	svc    *auth.Service
-	orgs   domain.OrgProvisioner
+	orgs   domain.OrgStore
 	secure bool // set the Secure cookie flag outside dev
 }
 
@@ -102,12 +105,31 @@ func (h *authHandler) logout(w http.ResponseWriter, r *http.Request) {
 
 func (h *authHandler) me(w http.ResponseWriter, r *http.Request) {
 	su, _ := r.Context().Value(userKey).(domain.SessionUser)
+	org, _ := r.Context().Value(orgObjKey).(domain.Org)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user_id": su.UserID,
 		"phone":   su.Phone,
 		"email":   su.Email,
 		"name":    su.Name,
+		"org":     map[string]any{"id": string(org.ID), "name": org.Name},
 	})
+}
+
+// renameOrg updates the caller's org display name.
+func (h *authHandler) renameOrg(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name required"})
+		return
+	}
+	if err := h.orgs.Rename(r.Context(), orgFromCtx(r), body.Name); err != nil {
+		h.log.Error("rename org", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"name": body.Name})
 }
 
 // requireAuth resolves the session cookie and injects the user, or 401s.
@@ -130,14 +152,15 @@ func (h *authHandler) requireAuth(next http.Handler) http.Handler {
 		}
 		// Resolve (and lazily provision) the user's org — auto-provision on first
 		// authenticated request. Every authed handler reads the org from context.
-		orgID, err := h.orgs.EnsureForUser(r.Context(), su.UserID, "My Store")
+		org, err := h.orgs.EnsureForUser(r.Context(), su.UserID, "My Store")
 		if err != nil {
 			h.log.Error("ensure org", "err", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 			return
 		}
 		ctx := context.WithValue(r.Context(), userKey, su)
-		ctx = context.WithValue(ctx, orgKey, orgID)
+		ctx = context.WithValue(ctx, orgKey, org.ID)
+		ctx = context.WithValue(ctx, orgObjKey, org)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

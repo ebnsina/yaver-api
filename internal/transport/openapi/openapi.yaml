@@ -156,6 +156,35 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/settings/org:
+    put:
+      operationId: renameOrg
+      summary: Rename the org (store) shown in the dashboard
+      tags: [settings]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '200':
+          description: Renamed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [name]
+                properties:
+                  name: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/settings/api-keys:
     post:
       operationId: createApiKey
@@ -297,12 +326,18 @@ components:
         phone: { type: string }
     Me:
       type: object
-      required: [user_id, phone, email, name]
+      required: [user_id, phone, email, name, org]
       properties:
         user_id: { type: string }
         phone: { type: string }
         email: { type: string }
         name: { type: string }
+        org:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string }
     Summary:
       type: object
       required: [total, confirmed, cancelled, today, confirmation_rate]

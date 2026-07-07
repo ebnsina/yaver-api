@@ -21,9 +21,9 @@ import (
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
 // arrive with rate-limit in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, orgProv domain.OrgProvisioner, callsSvc *calls.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
+func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
 	dev := env == "dev"
-	ah := &authHandler{log: log, svc: authSvc, orgs: orgProv, secure: !dev}
+	ah := &authHandler{log: log, svc: authSvc, orgs: orgStore, secure: !dev}
 	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
 	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc}
 	wh := &webhookHandler{log: log, svc: webhooksSvc}
@@ -50,6 +50,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgProv domain.Org
 	mux.Handle("POST /v1/events", ih.requireAPIKey(http.HandlerFunc(ih.postEvent)))
 
 	// Authenticated actions on the caller's org (org resolved from the session).
+	mux.Handle("PUT /v1/settings/org", ah.requireAuth(http.HandlerFunc(ah.renameOrg)))
 	mux.Handle("POST /v1/settings/api-keys", ah.requireAuth(http.HandlerFunc(ih.mintKey)))
 	mux.Handle("GET /v1/settings/webhook", ah.requireAuth(http.HandlerFunc(wh.getEndpoint)))
 	mux.Handle("POST /v1/settings/webhook", ah.requireAuth(http.HandlerFunc(wh.setEndpoint)))

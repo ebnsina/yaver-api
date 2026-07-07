@@ -48,10 +48,17 @@ type CallRepo interface {
 	Summary(ctx context.Context, orgID OrgID) (CallSummary, error)
 }
 
-// OrgProvisioner resolves (and lazily creates) the org for a user. Called on the
-// first authenticated request — the "auto-provision on first login" step.
-type OrgProvisioner interface {
-	EnsureForUser(ctx context.Context, userID, defaultName string) (OrgID, error)
+// Org is a merchant account.
+type Org struct {
+	ID   OrgID
+	Name string
+}
+
+// OrgStore resolves (and lazily creates) a user's org, and renames it. The
+// resolve step is the "auto-provision on first authenticated request".
+type OrgStore interface {
+	EnsureForUser(ctx context.Context, userID, defaultName string) (Org, error)
+	Rename(ctx context.Context, orgID OrgID, name string) error
 }
 
 // FlowRepo loads flow definitions.

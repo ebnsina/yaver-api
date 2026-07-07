@@ -28,12 +28,31 @@ func (q *Queries) CreateOrg(ctx context.Context, arg CreateOrgParams) error {
 }
 
 const getOrgByOwner = `-- name: GetOrgByOwner :one
-SELECT id FROM orgs WHERE owner_user_id = $1
+SELECT id, name FROM orgs WHERE owner_user_id = $1
 `
 
-func (q *Queries) GetOrgByOwner(ctx context.Context, ownerUserID uuid.UUID) (uuid.UUID, error) {
+type GetOrgByOwnerRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+func (q *Queries) GetOrgByOwner(ctx context.Context, ownerUserID uuid.UUID) (GetOrgByOwnerRow, error) {
 	row := q.db.QueryRow(ctx, getOrgByOwner, ownerUserID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i GetOrgByOwnerRow
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
+const renameOrg = `-- name: RenameOrg :exec
+UPDATE orgs SET name = $2 WHERE id = $1
+`
+
+type RenameOrgParams struct {
+	ID   uuid.UUID
+	Name string
+}
+
+func (q *Queries) RenameOrg(ctx context.Context, arg RenameOrgParams) error {
+	_, err := q.db.Exec(ctx, renameOrg, arg.ID, arg.Name)
+	return err
 }

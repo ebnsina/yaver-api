@@ -16,34 +16,34 @@ type OrgRepo struct{ pool *pgxpool.Pool }
 
 func NewOrgRepo(pool *pgxpool.Pool) *OrgRepo { return &OrgRepo{pool: pool} }
 
-// EnsureForUser returns the user's org id, creating the org (and seeding a
-// default order-confirmation flow) on first call. Idempotent and race-safe via
-// the unique index on orgs.owner_user_id.
-func (r *OrgRepo) EnsureForUser(ctx context.Context, userID, name string) (domain.OrgID, error) {
+// EnsureForUser returns the user's org, creating it (and seeding a default
+// order-confirmation flow) on first call. Idempotent and race-safe via the
+// unique index on orgs.owner_user_id.
+func (r *OrgRepo) EnsureForUser(ctx context.Context, userID, name string) (domain.Org, error) {
 	uid, err := uuid.Parse(userID)
 	if err != nil {
-		return "", err
+		return domain.Org{}, err
 	}
 	q := gen.New(r.pool)
 
-	id, err := q.GetOrgByOwner(ctx, uid)
+	row, err := q.GetOrgByOwner(ctx, uid)
 	if err == nil {
-		return domain.OrgID(id.String()), nil
+		return domain.Org{ID: domain.OrgID(row.ID.String()), Name: row.Name}, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return "", err
+		return domain.Org{}, err
 	}
 
 	orgID := uuid.New()
 	if err := q.CreateOrg(ctx, gen.CreateOrgParams{ID: orgID, Name: name, OwnerUserID: uid}); err != nil {
-		return "", err
+		return domain.Org{}, err
 	}
 	// Re-read: another concurrent request may have won the insert.
-	id, err = q.GetOrgByOwner(ctx, uid)
+	row, err = q.GetOrgByOwner(ctx, uid)
 	if err != nil {
-		return "", err
+		return domain.Org{}, err
 	}
-	if id == orgID { // we created it — seed the default flow
+	if row.ID == orgID { // we created it — seed the default flow
 		_ = q.CreateFlow(ctx, gen.CreateFlowParams{
 			ID:      "flow_" + orgID.String(),
 			OrgID:   orgID.String(),
@@ -55,7 +55,16 @@ func (r *OrgRepo) EnsureForUser(ctx context.Context, userID, name string) (domai
 			Spec:    defaultOrderConfirmSpec,
 		})
 	}
-	return domain.OrgID(id.String()), nil
+	return domain.Org{ID: domain.OrgID(row.ID.String()), Name: row.Name}, nil
+}
+
+// Rename changes the org's display name.
+func (r *OrgRepo) Rename(ctx context.Context, orgID domain.OrgID, name string) error {
+	id, err := uuid.Parse(string(orgID))
+	if err != nil {
+		return err
+	}
+	return gen.New(r.pool).RenameOrg(ctx, gen.RenameOrgParams{ID: id, Name: name})
 }
 
 // defaultOrderConfirmSpec is the IVR flow every new org starts with (editable in
