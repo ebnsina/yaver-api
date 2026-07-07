@@ -521,6 +521,22 @@ paths:
                 $ref: '#/components/schemas/Summary'
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/analytics/overview:
+    get:
+      operationId: getAnalyticsOverview
+      summary: Cross-channel dashboard rollup (calls, conversations, credits)
+      tags: [analytics]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Overview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsOverview'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/dev/test-call:
     post:
       operationId: testCall
@@ -765,6 +781,37 @@ components:
         cancelled: { type: integer }
         today: { type: integer }
         confirmation_rate: { type: integer, description: percent 0-100 }
+    AnalyticsOverview:
+      type: object
+      required: [calls, conversations, credits]
+      properties:
+        calls:
+          type: object
+          required: [total, confirmed, cancelled, today, confirmation_rate]
+          properties:
+            total: { type: integer }
+            confirmed: { type: integer }
+            cancelled: { type: integer }
+            today: { type: integer }
+            confirmation_rate: { type: integer, description: percent 0-100 }
+        conversations:
+          type: object
+          required: [total, today, resolved, pending, sale, needs_human, resolution_rate]
+          properties:
+            total: { type: integer }
+            today: { type: integer }
+            resolved: { type: integer }
+            pending: { type: integer }
+            sale: { type: integer }
+            needs_human: { type: integer }
+            resolution_rate: { type: integer, description: percent 0-100 }
+        credits:
+          type: object
+          required: [balance, spent_today, spent_30d]
+          properties:
+            balance: { type: integer }
+            spent_today: { type: integer }
+            spent_30d: { type: integer }
     TestCallRequest:
       type: object
       required: [phone]

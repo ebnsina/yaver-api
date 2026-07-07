@@ -25,6 +25,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/platform/clock"
 	"github.com/ebnsina/yaver-api/internal/platform/config"
 	"github.com/ebnsina/yaver-api/internal/platform/db"
+	"github.com/ebnsina/yaver-api/internal/service/analytics"
 	"github.com/ebnsina/yaver-api/internal/service/apikeys"
 	"github.com/ebnsina/yaver-api/internal/service/auth"
 	"github.com/ebnsina/yaver-api/internal/service/billing"
@@ -67,8 +68,10 @@ func main() {
 	flowRepo := postgres.NewFlowRepo(pool)
 	authSvc := auth.New(postgres.NewAuthRepo(pool), clock.Real{}, cfg.AuthSecret, cfg.Env)
 	creditRepo := postgres.NewCreditRepo(pool)
-	callsSvc := calls.New(voicemock.New(log), postgres.NewOutcomeRepo(pool), postgres.NewCallRepo(pool), flowRepo, creditRepo, clock.Real{})
+	callRepo := postgres.NewCallRepo(pool)
+	callsSvc := calls.New(voicemock.New(log), postgres.NewOutcomeRepo(pool), callRepo, flowRepo, creditRepo, clock.Real{})
 	billingSvc := billing.New(creditRepo)
+	analyticsSvc := analytics.New(callRepo, creditRepo, postgres.NewAnalyticsRepo(pool))
 	flowsSvc := flows.New(flowRepo)
 
 	// Orchestrator: Hatchet (durable, fairness-keyed) or the in-process local
@@ -130,7 +133,7 @@ func main() {
 	go webhooksSvc.Run(context.Background())
 
 	orgProv := postgres.NewOrgRepo(pool)
-	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, billingSvc, keysSvc, ingestSvc, webhooksSvc, orch)
+	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, billingSvc, analyticsSvc, keysSvc, ingestSvc, webhooksSvc, orch)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,
