@@ -42,6 +42,40 @@ func (h *flowsHandler) list(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"flows": out})
 }
 
+// create adds a new flow (no-code builder / templates) and returns its id.
+func (h *flowsHandler) create(w http.ResponseWriter, r *http.Request) {
+	raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	var body struct {
+		Name    string          `json:"name"`
+		Channel string          `json:"channel"`
+		Type    string          `json:"type"`
+		Locale  string          `json:"locale"`
+		Spec    json.RawMessage `json:"spec"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil || body.Name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name required"})
+		return
+	}
+	id, err := h.svc.Create(r.Context(), orgFromCtx(r), domain.NewFlow{
+		Name:    body.Name,
+		Channel: domain.Channel(body.Channel),
+		Type:    domain.FlowType(body.Type),
+		Locale:  body.Locale,
+		Spec:    body.Spec,
+	})
+	switch {
+	case errors.Is(err, domain.ErrConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "a flow with that name already exists"})
+	case errors.Is(err, domain.ErrFlowInvalid):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid flow (name, type, or spec)"})
+	case err != nil:
+		h.log.Error("create flow", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+	default:
+		writeJSON(w, http.StatusCreated, map[string]string{"id": string(id)})
+	}
+}
+
 func (h *flowsHandler) get(w http.ResponseWriter, r *http.Request) {
 	fd, err := h.svc.Get(r.Context(), orgFromCtx(r), domain.FlowID(r.PathValue("id")))
 	if errors.Is(err, domain.ErrNotFound) {

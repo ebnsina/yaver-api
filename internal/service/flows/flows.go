@@ -30,6 +30,40 @@ func (s *Service) Get(ctx context.Context, orgID domain.OrgID, id domain.FlowID)
 	return fd, nil
 }
 
+// knownFlowTypes are the flow types the builder can create today.
+var knownFlowTypes = map[domain.FlowType]bool{domain.FlowIVR: true, domain.FlowChat: true}
+
+// Create adds a new active flow for the org. Names are unique per org among
+// active flows so event routing (name → flow) stays unambiguous.
+func (s *Service) Create(ctx context.Context, orgID domain.OrgID, nf domain.NewFlow) (domain.FlowID, error) {
+	if nf.Name == "" || !knownFlowTypes[nf.Type] {
+		return "", domain.ErrFlowInvalid
+	}
+	if nf.Locale == "" {
+		nf.Locale = "en"
+	}
+	if nf.Channel == "" {
+		if nf.Type == domain.FlowChat {
+			nf.Channel = domain.ChannelChat
+		} else {
+			nf.Channel = domain.ChannelVoice
+		}
+	}
+	// IVR flows carry a keypad spec we can validate up front.
+	if nf.Type == domain.FlowIVR {
+		if err := validateIVR(nf.Spec); err != nil {
+			return "", err
+		}
+	}
+	// Reject a duplicate active name so routing stays unambiguous.
+	if _, found, err := s.repo.GetActiveFlow(ctx, orgID, nf.Name); err != nil {
+		return "", err
+	} else if found {
+		return "", domain.ErrConflict
+	}
+	return s.repo.Create(ctx, orgID, nf)
+}
+
 // UpdateSpec validates and replaces an IVR flow's spec.
 func (s *Service) UpdateSpec(ctx context.Context, orgID domain.OrgID, id domain.FlowID, spec []byte) error {
 	// Ownership check.

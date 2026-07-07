@@ -10,6 +10,7 @@ import (
 
 	"github.com/ebnsina/yaver-api/internal/adapter/postgres/gen"
 	"github.com/ebnsina/yaver-api/internal/domain"
+	"github.com/ebnsina/yaver-api/pkg/id"
 )
 
 type FlowRepo struct {
@@ -42,6 +43,24 @@ func (r *FlowRepo) GetActiveFlow(ctx context.Context, orgID domain.OrgID, name s
 		}
 	}
 	return f, true, nil
+}
+
+func (r *FlowRepo) Create(ctx context.Context, orgID domain.OrgID, nf domain.NewFlow) (domain.FlowID, error) {
+	fid := id.New("flow")
+	err := r.q.CreateFlow(ctx, gen.CreateFlowParams{
+		ID:      fid,
+		OrgID:   string(orgID),
+		Name:    nf.Name,
+		Version: 1,
+		Channel: string(nf.Channel),
+		Type:    string(nf.Type),
+		Locale:  nf.Locale,
+		Spec:    nf.Spec,
+	})
+	if err != nil {
+		return "", err
+	}
+	return domain.FlowID(fid), nil
 }
 
 func (r *FlowRepo) ListByOrg(ctx context.Context, orgID domain.OrgID) ([]domain.FlowSummary, error) {

@@ -86,10 +86,21 @@ type FlowDetail struct {
 	Spec    []byte // raw JSONB
 }
 
+// NewFlow is the input to create a flow (version + id assigned by the repo).
+type NewFlow struct {
+	Name    string
+	Channel Channel
+	Type    FlowType
+	Locale  string
+	Spec    []byte
+}
+
 // FlowRepo loads and edits flow definitions.
 type FlowRepo interface {
 	// GetActiveFlow returns the active flow for (org, name). found=false if none.
 	GetActiveFlow(ctx context.Context, orgID OrgID, name string) (f Flow, found bool, err error)
+	// Create inserts a new active flow (version 1) and returns its id.
+	Create(ctx context.Context, orgID OrgID, nf NewFlow) (FlowID, error)
 	ListByOrg(ctx context.Context, orgID OrgID) ([]FlowSummary, error)
 	// GetByID returns a flow; found=false if absent. Caller checks org ownership.
 	GetByID(ctx context.Context, id FlowID) (fd FlowDetail, found bool, err error)

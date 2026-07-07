@@ -452,6 +452,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/FlowList'
         '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: createFlow
+      summary: Create a flow (no-code builder / templates)
+      description: >
+        Names are unique per org among active flows, so ingest can route an event
+        type to a flow by name (e.g. cart_abandoned → cart_recovery).
+      tags: [flows]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name: { type: string, example: cart_recovery }
+                type: { type: string, enum: [ivr, chat], default: ivr }
+                channel: { type: string, enum: [voice, chat] }
+                locale: { type: string, default: en }
+                spec: { type: object, additionalProperties: true, description: 'IVR keypad spec (required for type=ivr)' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: A flow with that name already exists }
 
   /v1/flows/{id}:
     get:
@@ -740,7 +775,7 @@ paths:
   /v1/events:
     post:
       operationId: ingestEvent
-      summary: Ingest a merchant store event (triggers a call for order_placed)
+      summary: Ingest a merchant store event (routes to the matching flow)
       tags: [ingest]
       security:
         - apiKeyAuth: []
@@ -1120,7 +1155,11 @@ components:
       properties:
         event_type:
           type: string
-          enum: [order_placed, order_cancelled, abandoned_cart]
+          description: >
+            Routed to a flow by name: order_placed→order_confirm,
+            abandoned_cart→cart_recovery, out_for_delivery→delivery_reminder.
+            Other types are stored but trigger no call.
+          enum: [order_placed, order_cancelled, abandoned_cart, out_for_delivery]
         event_id: { type: string, description: Merchant-side unique id (idempotency) }
         customer:
           type: object

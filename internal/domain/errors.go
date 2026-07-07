@@ -12,4 +12,5 @@ var (
 	ErrUnauthorized        = errors.New("unauthorized")
 	ErrOutsideCallWindow   = errors.New("outside the allowed calling window")
 	ErrInvalidCallPolicy   = errors.New("invalid call policy")
+	ErrConflict            = errors.New("already exists")
 )

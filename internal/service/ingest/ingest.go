@@ -1,5 +1,6 @@
-// Package ingest accepts inbound merchant events: normalize, dedup, and (for
-// order_placed) enqueue a confirmation call — the Phase 1 wedge.
+// Package ingest accepts inbound merchant events: normalize, dedup, and route
+// each known event type to the flow that handles it (order confirmation,
+// cart recovery, delivery reminder).
 package ingest
 
 import (
@@ -19,6 +20,14 @@ type Service struct {
 
 func New(events domain.EventRepo, customers domain.CustomerRepo, flows domain.FlowRepo, orch domain.Orchestrator) *Service {
 	return &Service{events: events, customers: customers, flows: flows, orch: orch}
+}
+
+// eventFlow maps an inbound event type to the flow name that handles it. Types
+// not listed are still stored (for audit/analytics) but trigger no call.
+var eventFlow = map[string]string{
+	"order_placed":     "order_confirm",
+	"abandoned_cart":   "cart_recovery",
+	"out_for_delivery": "delivery_reminder",
 }
 
 // Event is the normalized-at-transport input.
@@ -66,14 +75,15 @@ func (s *Service) Accept(ctx context.Context, orgID domain.OrgID, ev Event) (eve
 		}
 	}
 
-	// Trigger a confirmation call — unless the customer is on DND.
-	if ev.Type == "order_placed" && e164 != "" && !dnd {
-		var flowID domain.FlowID
-		if f, found, ferr := s.flows.GetActiveFlow(ctx, orgID, "order_confirm"); ferr == nil && found {
-			flowID = f.ID
-		}
-		if err := s.orch.EnqueuePlaceCall(ctx, domain.PlaceCallInput{OrgID: orgID, ToPhone: e164, FlowID: flowID}); err != nil {
-			return "", false, err
+	// Route the event to its flow and place a call — unless the customer is on
+	// DND, the phone is missing, or the merchant hasn't built a flow for it.
+	if flowName, mapped := eventFlow[ev.Type]; mapped && e164 != "" && !dnd {
+		if f, found, ferr := s.flows.GetActiveFlow(ctx, orgID, flowName); ferr != nil {
+			return "", false, ferr
+		} else if found {
+			if err := s.orch.EnqueuePlaceCall(ctx, domain.PlaceCallInput{OrgID: orgID, ToPhone: e164, FlowID: f.ID}); err != nil {
+				return "", false, err
+			}
 		}
 	}
 	return eventID, false, nil
