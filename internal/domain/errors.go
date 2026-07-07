@@ -10,4 +10,6 @@ var (
 	ErrFlowInvalid         = errors.New("invalid flow spec")
 	ErrInvalidOTP          = errors.New("invalid or expired code")
 	ErrUnauthorized        = errors.New("unauthorized")
+	ErrOutsideCallWindow   = errors.New("outside the allowed calling window")
+	ErrInvalidCallPolicy   = errors.New("invalid call policy")
 )

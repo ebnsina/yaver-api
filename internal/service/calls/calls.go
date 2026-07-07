@@ -22,11 +22,25 @@ type Service struct {
 	calls    domain.CallRepo
 	flows    domain.FlowRepo
 	credits  domain.CreditRepo
+	policy   domain.CallPolicyRepo
 	clock    domain.Clock
 }
 
-func New(provider domain.VoiceProvider, outcomeRepo domain.OutcomeRepo, callRepo domain.CallRepo, flowRepo domain.FlowRepo, credits domain.CreditRepo, clock domain.Clock) *Service {
-	return &Service{ivr: flowengine.NewIVR(), provider: provider, outcomes: outcomeRepo, calls: callRepo, flows: flowRepo, credits: credits, clock: clock}
+func New(provider domain.VoiceProvider, outcomeRepo domain.OutcomeRepo, callRepo domain.CallRepo, flowRepo domain.FlowRepo, credits domain.CreditRepo, policy domain.CallPolicyRepo, clock domain.Clock) *Service {
+	return &Service{ivr: flowengine.NewIVR(), provider: provider, outcomes: outcomeRepo, calls: callRepo, flows: flowRepo, credits: credits, policy: policy, clock: clock}
+}
+
+// Policy returns the org's calling policy (defaults if unset).
+func (s *Service) Policy(ctx context.Context, orgID domain.OrgID) (domain.CallPolicy, error) {
+	return s.policy.Get(ctx, orgID)
+}
+
+// SavePolicy validates and persists the org's calling policy.
+func (s *Service) SavePolicy(ctx context.Context, orgID domain.OrgID, p domain.CallPolicy) error {
+	if !p.Valid() {
+		return domain.ErrInvalidCallPolicy
+	}
+	return s.policy.Upsert(ctx, orgID, p)
 }
 
 // List returns recent calls for an org, newest first.
@@ -116,6 +130,16 @@ func outcomeEvent(c *domain.Call) *domain.OutboxEvent {
 // a queued Call. (Live leg events land in Phase 1.) Written to be safe under the
 // orchestrator's at-least-once delivery.
 func (s *Service) PlaceCall(ctx context.Context, in domain.PlaceCallInput) error {
+	// Respect the org's calling window before doing any work — no dialing
+	// customers outside allowed local hours.
+	pol, err := s.policy.Get(ctx, in.OrgID)
+	if err != nil {
+		return err
+	}
+	if !pol.Allows(s.clock.Now()) {
+		return domain.ErrOutsideCallWindow
+	}
+
 	// Meter usage before dialing; skip (no call) if the org is out of credits.
 	if ok, _, err := s.credits.TryDeduct(ctx, in.OrgID, creditsPerCall, "call"); err != nil {
 		return err

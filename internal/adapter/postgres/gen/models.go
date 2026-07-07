@@ -140,6 +140,14 @@ type Org struct {
 	CreatedAt           time.Time
 }
 
+type OrgCallPolicy struct {
+	OrgID       string
+	WindowStart int16
+	WindowEnd   int16
+	Timezone    string
+	MaxRetries  int16
+}
+
 type OrgCredit struct {
 	OrgID   string
 	Balance int32

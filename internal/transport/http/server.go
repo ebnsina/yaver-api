@@ -62,6 +62,8 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("GET /v1/me", ah.requireAuth(http.HandlerFunc(ah.me)))
 	mux.Handle("GET /v1/calls", ah.requireAuth(http.HandlerFunc(ch.listCalls)))
 	mux.Handle("GET /v1/calls/{id}", ah.requireAuth(http.HandlerFunc(ch.getCall)))
+	mux.Handle("GET /v1/settings/call-policy", ah.requireAuth(http.HandlerFunc(ch.getPolicy)))
+	mux.Handle("PUT /v1/settings/call-policy", ah.requireAuth(http.HandlerFunc(ch.savePolicy)))
 	mux.Handle("GET /v1/analytics/summary", ah.requireAuth(http.HandlerFunc(ch.summary)))
 	mux.Handle("GET /v1/analytics/overview", ah.requireAuth(http.HandlerFunc(anh.overview)))
 	mux.Handle("POST /v1/reports/ask", ah.requireAuth(http.HandlerFunc(rph.ask)))

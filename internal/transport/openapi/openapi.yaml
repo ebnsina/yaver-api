@@ -117,6 +117,38 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/BadRequest' }
 
+  /v1/settings/call-policy:
+    get:
+      operationId: getCallPolicy
+      summary: The org's calling window + retry policy
+      tags: [settings]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Call policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallPolicy'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      operationId: saveCallPolicy
+      summary: Update the calling window + retry policy
+      tags: [settings]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallPolicy'
+      responses:
+        '200': { description: Saved }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/chat/messages:
     post:
       operationId: sendChatMessage
@@ -845,6 +877,14 @@ components:
             balance: { type: integer }
             spent_today: { type: integer }
             spent_30d: { type: integer }
+    CallPolicy:
+      type: object
+      required: [window_start, window_end, timezone, max_retries]
+      properties:
+        window_start: { type: integer, description: 'local hour calls may start, inclusive (0-23)' }
+        window_end: { type: integer, description: 'local hour calls must stop, exclusive (1-24)' }
+        timezone: { type: string, example: 'Asia/Dhaka' }
+        max_retries: { type: integer, description: 'retry attempts for a failed call (0-10)' }
     TestCallRequest:
       type: object
       required: [phone]
