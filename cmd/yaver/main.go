@@ -104,7 +104,7 @@ func main() {
 		log.Error("unsupported YAVER_CHAT_PROVIDER (only 'builtin' is implemented)", "value", cfg.ChatProvider)
 		os.Exit(1)
 	}
-	chatSvc := chat.New(postgres.NewChatRepo(pool), chatModel)
+	chatSvc := chat.New(postgres.NewChatRepo(pool), postgres.NewChatSettingsRepo(pool), chatModel)
 
 	// Webhook dispatcher: drains the outbox and delivers, on its own loop.
 	webhooksSvc := webhooks.New(postgres.NewWebhookRepo(pool), cipher, log)

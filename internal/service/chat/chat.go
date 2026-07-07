@@ -8,17 +8,27 @@ import (
 	"github.com/ebnsina/yaver-api/pkg/id"
 )
 
-// systemPrompt steers the assistant. A per-org / per-flow prompt can replace
-// this once chat flows are editable in the builder.
-const systemPrompt = "You are a friendly customer-support assistant for a Bangladeshi online store. Be concise and helpful."
+// defaultPrompt steers the assistant when an org hasn't set custom instructions.
+const defaultPrompt = "You are a friendly customer-support assistant for a Bangladeshi online store. Be concise and helpful."
 
 type Service struct {
-	repo  domain.ChatRepo
-	model domain.ChatModel
+	repo     domain.ChatRepo
+	settings domain.ChatSettingsRepo
+	model    domain.ChatModel
 }
 
-func New(repo domain.ChatRepo, model domain.ChatModel) *Service {
-	return &Service{repo: repo, model: model}
+func New(repo domain.ChatRepo, settings domain.ChatSettingsRepo, model domain.ChatModel) *Service {
+	return &Service{repo: repo, settings: settings, model: model}
+}
+
+// Settings returns the org's chat/widget settings.
+func (s *Service) Settings(ctx context.Context, orgID domain.OrgID) (domain.ChatSettings, error) {
+	return s.settings.Get(ctx, orgID)
+}
+
+// SaveSettings updates the org's chat/widget settings.
+func (s *Service) SaveSettings(ctx context.Context, orgID domain.OrgID, cs domain.ChatSettings) error {
+	return s.settings.Upsert(ctx, orgID, cs)
 }
 
 // Send appends a user message (starting a conversation if convID is empty),
@@ -41,7 +51,11 @@ func (s *Service) Send(ctx context.Context, orgID domain.OrgID, convID, text str
 	if err != nil {
 		return "", "", err
 	}
-	reply, err := s.model.Reply(ctx, systemPrompt, history)
+	prompt := defaultPrompt
+	if cs, err := s.settings.Get(ctx, orgID); err == nil && cs.Instructions != "" {
+		prompt = cs.Instructions
+	}
+	reply, err := s.model.Reply(ctx, prompt, history)
 	if err != nil {
 		return "", "", err
 	}

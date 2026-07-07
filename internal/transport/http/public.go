@@ -66,6 +66,28 @@ func (h *publicHandler) chatSend(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"conversation_id": convID, "reply": reply})
 }
 
+// chatConfig returns the widget's public appearance (title, welcome, accent),
+// resolved from the publishable key. No secrets.
+func (h *publicHandler) chatConfig(w http.ResponseWriter, r *http.Request) {
+	org, kind, ok, err := h.keys.Authenticate(r.Context(), r.Header.Get("X-Yaver-Key"))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	if !ok || kind != "publishable" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid publishable key"})
+		return
+	}
+	cs, err := h.chat.Settings(r.Context(), org)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"title": cs.WidgetTitle, "welcome": cs.Welcome, "accent": cs.Accent,
+	})
+}
+
 // widget serves the self-contained embed script.
 func (h *publicHandler) widget(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")

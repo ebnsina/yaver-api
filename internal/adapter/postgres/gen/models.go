@@ -43,6 +43,15 @@ type Campaign struct {
 	StartedAt   *time.Time
 }
 
+type ChatSetting struct {
+	OrgID        string
+	Instructions string
+	WidgetTitle  string
+	Welcome      string
+	Accent       string
+	UpdatedAt    time.Time
+}
+
 type Conversation struct {
 	ID         string
 	OrgID      string

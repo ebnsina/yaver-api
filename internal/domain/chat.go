@@ -23,6 +23,30 @@ type Message struct {
 	CreatedAt time.Time
 }
 
+// ChatSettings is per-org chat/widget configuration.
+type ChatSettings struct {
+	Instructions string // assistant system prompt (used by a real LLM)
+	WidgetTitle  string
+	Welcome      string
+	Accent       string // widget brand color (hex)
+}
+
+// DefaultChatSettings is returned when an org hasn't customized anything yet.
+func DefaultChatSettings() ChatSettings {
+	return ChatSettings{
+		WidgetTitle: "Chat with us",
+		Welcome:     "Hi! 👋 How can I help you today?",
+		Accent:      "#111827",
+	}
+}
+
+// ChatSettingsRepo persists per-org chat settings.
+type ChatSettingsRepo interface {
+	// Get returns the org's settings, or DefaultChatSettings if none saved.
+	Get(ctx context.Context, orgID OrgID) (ChatSettings, error)
+	Upsert(ctx context.Context, orgID OrgID, s ChatSettings) error
+}
+
 // ChatModel generates an assistant reply. This is the provider-agnostic seam:
 // swap the adapter (built-in, OpenAI, Anthropic, …) without touching the service.
 type ChatModel interface {

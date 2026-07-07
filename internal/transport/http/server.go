@@ -64,6 +64,8 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("POST /v1/chat/messages", ah.requireAuth(http.HandlerFunc(chh.send)))
 	mux.Handle("GET /v1/chat/conversations", ah.requireAuth(http.HandlerFunc(chh.list)))
 	mux.Handle("GET /v1/chat/conversations/{id}", ah.requireAuth(http.HandlerFunc(chh.messages)))
+	mux.Handle("GET /v1/chat/settings", ah.requireAuth(http.HandlerFunc(chh.getSettings)))
+	mux.Handle("PUT /v1/chat/settings", ah.requireAuth(http.HandlerFunc(chh.saveSettings)))
 
 	// Campaigns (bulk outbound).
 	mux.Handle("GET /v1/campaigns", ah.requireAuth(http.HandlerFunc(cah.list)))
@@ -86,6 +88,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 
 	// Public widget surface (cross-origin, publishable-key auth).
 	mux.Handle("/public/chat/messages", cors(http.HandlerFunc(ph.chatSend)))
+	mux.Handle("/public/chat/config", cors(http.HandlerFunc(ph.chatConfig)))
 	mux.Handle("GET /widget.js", cors(http.HandlerFunc(ph.widget)))
 	mux.Handle("GET /v1/settings/webhook", ah.requireAuth(http.HandlerFunc(wh.getEndpoint)))
 	mux.Handle("POST /v1/settings/webhook", ah.requireAuth(http.HandlerFunc(wh.setEndpoint)))

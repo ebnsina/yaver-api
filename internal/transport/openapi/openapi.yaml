@@ -148,6 +148,41 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/chat/settings:
+    get:
+      operationId: getChatSettings
+      summary: Chat/widget settings
+      tags: [chat]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSettings'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      operationId: saveChatSettings
+      summary: Update chat/widget settings
+      tags: [chat]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatSettings'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/chat/conversations:
     get:
       operationId: listConversations
@@ -665,6 +700,14 @@ components:
       required: [secret]
       properties:
         secret: { type: string }
+    ChatSettings:
+      type: object
+      required: [instructions, widget_title, welcome, accent]
+      properties:
+        instructions: { type: string }
+        widget_title: { type: string }
+        welcome: { type: string }
+        accent: { type: string }
     Conversation:
       type: object
       required: [id, status, last_message, message_count, updated_at]
