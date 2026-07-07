@@ -22,6 +22,13 @@ FROM conversations c WHERE c.org_id = $1 ORDER BY c.updated_at DESC LIMIT $2;
 -- name: TouchConversation :exec
 UPDATE conversations SET updated_at = now() WHERE id = $1;
 
+-- name: SetConversationStatus :exec
+UPDATE conversations SET status = $2, updated_at = now() WHERE id = $1;
+
+-- name: GetConversationTarget :one
+SELECT channel, COALESCE(external_user, '') AS external_user
+FROM conversations WHERE id = $1;
+
 -- name: InsertMessage :exec
 INSERT INTO messages (id, conversation_id, role, content) VALUES ($1, $2, $3, $4);
 

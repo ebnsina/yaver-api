@@ -50,6 +50,28 @@ func (q *Queries) GetChannelByExternalID(ctx context.Context, externalID string)
 	return i, err
 }
 
+const getChannelByOrgAndType = `-- name: GetChannelByOrgAndType :one
+SELECT external_id, access_token
+FROM channel_connections WHERE org_id = $1 AND type = $2
+`
+
+type GetChannelByOrgAndTypeParams struct {
+	OrgID string
+	Type  string
+}
+
+type GetChannelByOrgAndTypeRow struct {
+	ExternalID  string
+	AccessToken []byte
+}
+
+func (q *Queries) GetChannelByOrgAndType(ctx context.Context, arg GetChannelByOrgAndTypeParams) (GetChannelByOrgAndTypeRow, error) {
+	row := q.db.QueryRow(ctx, getChannelByOrgAndType, arg.OrgID, arg.Type)
+	var i GetChannelByOrgAndTypeRow
+	err := row.Scan(&i.ExternalID, &i.AccessToken)
+	return i, err
+}
+
 const getChannelByVerifyToken = `-- name: GetChannelByVerifyToken :one
 SELECT org_id, type FROM channel_connections WHERE verify_token = $1 LIMIT 1
 `

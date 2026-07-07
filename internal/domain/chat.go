@@ -93,11 +93,23 @@ type InsightRepo interface {
 	Get(ctx context.Context, conversationID string) (in ConversationInsight, found bool, err error)
 }
 
+// Conversation status vocabulary. "handling" means a human agent has taken over
+// (the assistant stops auto-replying so it doesn't talk over the person).
+const (
+	ConvOpen     = "open"
+	ConvHandling = "handling"
+	ConvClosed   = "closed"
+)
+
 // ChatRepo persists conversations and messages.
 type ChatRepo interface {
 	CreateConversation(ctx context.Context, orgID OrgID, id string) error
 	// GetConversation returns the conversation's owning org (caller checks it).
 	GetConversation(ctx context.Context, id string) (orgID OrgID, status string, found bool, err error)
+	// ChannelTarget returns the conversation's channel and channel-side user id
+	// (for delivering an agent's reply back out over messaging).
+	ChannelTarget(ctx context.Context, id string) (channel, externalUser string, err error)
+	SetStatus(ctx context.Context, id, status string) error
 	ListConversations(ctx context.Context, orgID OrgID, limit int) ([]Conversation, error)
 	AddMessage(ctx context.Context, conversationID, role, content string) error
 	Messages(ctx context.Context, conversationID string) ([]Message, error)

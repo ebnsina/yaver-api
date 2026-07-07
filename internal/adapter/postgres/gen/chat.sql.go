@@ -92,6 +92,23 @@ func (q *Queries) GetConversation(ctx context.Context, id string) (GetConversati
 	return i, err
 }
 
+const getConversationTarget = `-- name: GetConversationTarget :one
+SELECT channel, COALESCE(external_user, '') AS external_user
+FROM conversations WHERE id = $1
+`
+
+type GetConversationTargetRow struct {
+	Channel      string
+	ExternalUser string
+}
+
+func (q *Queries) GetConversationTarget(ctx context.Context, id string) (GetConversationTargetRow, error) {
+	row := q.db.QueryRow(ctx, getConversationTarget, id)
+	var i GetConversationTargetRow
+	err := row.Scan(&i.Channel, &i.ExternalUser)
+	return i, err
+}
+
 const insertMessage = `-- name: InsertMessage :exec
 INSERT INTO messages (id, conversation_id, role, content) VALUES ($1, $2, $3, $4)
 `
@@ -194,6 +211,20 @@ func (q *Queries) ListMessages(ctx context.Context, conversationID string) ([]Li
 		return nil, err
 	}
 	return items, nil
+}
+
+const setConversationStatus = `-- name: SetConversationStatus :exec
+UPDATE conversations SET status = $2, updated_at = now() WHERE id = $1
+`
+
+type SetConversationStatusParams struct {
+	ID     string
+	Status string
+}
+
+func (q *Queries) SetConversationStatus(ctx context.Context, arg SetConversationStatusParams) error {
+	_, err := q.db.Exec(ctx, setConversationStatus, arg.ID, arg.Status)
+	return err
 }
 
 const touchConversation = `-- name: TouchConversation :exec

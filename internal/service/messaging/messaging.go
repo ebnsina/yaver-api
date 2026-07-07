@@ -45,6 +45,28 @@ func (s *Service) Disconnect(ctx context.Context, orgID domain.OrgID, typ string
 	return s.conns.Delete(ctx, orgID, typ)
 }
 
+// SendOutbound delivers a message the merchant composed (e.g. a human agent's
+// reply during takeover) to a channel user. No-op if the org hasn't connected
+// that channel. Web-widget conversations have no external transport, so callers
+// only invoke this for messaging channels.
+func (s *Service) SendOutbound(ctx context.Context, orgID domain.OrgID, channel, toUser, text string) error {
+	externalID, encToken, found, err := s.conns.ByOrgAndType(ctx, orgID, channel)
+	if err != nil {
+		return err
+	}
+	if !found {
+		s.log.Warn("outbound for unconnected channel", "org", orgID, "channel", channel)
+		return nil
+	}
+	token, err := s.cipher.Decrypt(encToken)
+	if err != nil {
+		return err
+	}
+	return s.sender.Send(ctx, domain.OutboundMessage{
+		Type: channel, FromExternalID: externalID, AccessToken: string(token), To: toUser, Text: text,
+	})
+}
+
 // VerifyChallenge reports whether a Meta webhook verify_token matches a
 // connection (used for the GET subscription handshake).
 func (s *Service) VerifyChallenge(ctx context.Context, verifyToken string) bool {
@@ -66,6 +88,9 @@ func (s *Service) HandleInbound(ctx context.Context, toExternalID, from, text st
 	reply, err := s.assistant.SendChannel(ctx, orgID, typ, from, text)
 	if err != nil {
 		return err
+	}
+	if reply == "" {
+		return nil // a human is handling this thread; nothing to auto-send
 	}
 	token, err := s.cipher.Decrypt(encToken)
 	if err != nil {

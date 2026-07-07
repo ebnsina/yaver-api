@@ -36,7 +36,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	fh := &flowsHandler{log: log, svc: flowsSvc}
 	cuh := &customersHandler{log: log, svc: custSvc}
 	cah := &campaignsHandler{log: log, svc: campSvc}
-	chh := &chatHandler{log: log, svc: chatSvc}
+	chh := &chatHandler{log: log, svc: chatSvc, msg: msgSvc}
 	ph := &publicHandler{log: log, keys: keysSvc, chat: chatSvc}
 	cnh := &channelsHandler{log: log, svc: msgSvc}
 	mwh := &metaWebhookHandler{log: log, svc: msgSvc}
@@ -82,6 +82,8 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("GET /v1/chat/conversations", ah.requireAuth(http.HandlerFunc(chh.list)))
 	mux.Handle("GET /v1/chat/conversations/{id}", ah.requireAuth(http.HandlerFunc(chh.messages)))
 	mux.Handle("POST /v1/chat/conversations/{id}/summarize", ah.requireAuth(http.HandlerFunc(chh.summarize)))
+	mux.Handle("PUT /v1/chat/conversations/{id}/status", ah.requireAuth(http.HandlerFunc(chh.setStatus)))
+	mux.Handle("POST /v1/chat/conversations/{id}/reply", ah.requireAuth(http.HandlerFunc(chh.agentReply)))
 	mux.Handle("GET /v1/chat/settings", ah.requireAuth(http.HandlerFunc(chh.getSettings)))
 	mux.Handle("PUT /v1/chat/settings", ah.requireAuth(http.HandlerFunc(chh.saveSettings)))
 

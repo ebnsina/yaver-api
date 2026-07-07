@@ -19,3 +19,7 @@ FROM channel_connections WHERE external_id = $1;
 
 -- name: GetChannelByVerifyToken :one
 SELECT org_id, type FROM channel_connections WHERE verify_token = $1 LIMIT 1;
+
+-- name: GetChannelByOrgAndType :one
+SELECT external_id, access_token
+FROM channel_connections WHERE org_id = $1 AND type = $2;

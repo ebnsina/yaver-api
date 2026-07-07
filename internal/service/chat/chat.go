@@ -64,9 +64,16 @@ func (s *Service) SendChannel(ctx context.Context, orgID domain.OrgID, channel, 
 }
 
 // reply appends the user's message, generates + stores the assistant reply.
+// When a human has taken the conversation over (status "handling"), the message
+// is stored but the assistant stays silent — it must not talk over the agent.
 func (s *Service) reply(ctx context.Context, orgID domain.OrgID, convID, text string) (string, error) {
 	if err := s.repo.AddMessage(ctx, convID, "user", text); err != nil {
 		return "", err
+	}
+	if _, status, _, err := s.repo.GetConversation(ctx, convID); err != nil {
+		return "", err
+	} else if status == domain.ConvHandling {
+		return "", nil // a human is handling this thread; assistant stays quiet
 	}
 	history, err := s.repo.Messages(ctx, convID)
 	if err != nil {
@@ -130,6 +137,37 @@ func (s *Service) Insight(ctx context.Context, orgID domain.OrgID, convID string
 		return domain.ConversationInsight{}, false, err
 	}
 	return s.insights.Get(ctx, convID)
+}
+
+// validStatus is the set a conversation can be moved to.
+var validStatus = map[string]bool{domain.ConvOpen: true, domain.ConvHandling: true, domain.ConvClosed: true}
+
+// SetStatus transitions a conversation (e.g. a human taking over → "handling",
+// or closing it out → "closed").
+func (s *Service) SetStatus(ctx context.Context, orgID domain.OrgID, convID, status string) error {
+	if !validStatus[status] {
+		return domain.ErrFlowInvalid
+	}
+	if err := s.owns(ctx, orgID, convID); err != nil {
+		return err
+	}
+	return s.repo.SetStatus(ctx, convID, status)
+}
+
+// AgentReply records a human agent's message in the conversation (role "agent")
+// and returns the channel + channel-side user so the caller can deliver it out
+// over messaging. Taking over implicitly marks the thread "handling".
+func (s *Service) AgentReply(ctx context.Context, orgID domain.OrgID, convID, text string) (channel, externalUser string, err error) {
+	if err := s.owns(ctx, orgID, convID); err != nil {
+		return "", "", err
+	}
+	if err := s.repo.SetStatus(ctx, convID, domain.ConvHandling); err != nil {
+		return "", "", err
+	}
+	if err := s.repo.AddMessage(ctx, convID, "agent", text); err != nil {
+		return "", "", err
+	}
+	return s.repo.ChannelTarget(ctx, convID)
 }
 
 func (s *Service) owns(ctx context.Context, orgID domain.OrgID, convID string) error {

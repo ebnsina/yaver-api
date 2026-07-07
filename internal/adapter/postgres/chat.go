@@ -47,6 +47,18 @@ func (r *ChatRepo) GetConversation(ctx context.Context, cid string) (domain.OrgI
 	return domain.OrgID(row.OrgID), row.Status, true, nil
 }
 
+func (r *ChatRepo) ChannelTarget(ctx context.Context, cid string) (string, string, error) {
+	row, err := r.q.GetConversationTarget(ctx, cid)
+	if err != nil {
+		return "", "", err
+	}
+	return row.Channel, row.ExternalUser, nil
+}
+
+func (r *ChatRepo) SetStatus(ctx context.Context, cid, status string) error {
+	return r.q.SetConversationStatus(ctx, gen.SetConversationStatusParams{ID: cid, Status: status})
+}
+
 func (r *ChatRepo) ListConversations(ctx context.Context, orgID domain.OrgID, limit int) ([]domain.Conversation, error) {
 	rows, err := r.q.ListConversationsByOrg(ctx, gen.ListConversationsByOrgParams{OrgID: string(orgID), Limit: int32(limit)})
 	if err != nil {

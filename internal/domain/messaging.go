@@ -22,6 +22,9 @@ type ChannelRepo interface {
 	Delete(ctx context.Context, orgID OrgID, typ string) error
 	// ByExternalID resolves an inbound message's destination to its org + creds.
 	ByExternalID(ctx context.Context, externalID string) (orgID OrgID, typ string, encToken []byte, verifyToken string, found bool, err error)
+	// ByOrgAndType resolves an org's connection for a channel type, for outbound
+	// (e.g. an agent's manual reply). found=false if the org hasn't connected it.
+	ByOrgAndType(ctx context.Context, orgID OrgID, typ string) (externalID string, encToken []byte, found bool, err error)
 	// OrgForVerifyToken supports the Meta webhook GET challenge.
 	OrgForVerifyToken(ctx context.Context, verifyToken string) (found bool, err error)
 }

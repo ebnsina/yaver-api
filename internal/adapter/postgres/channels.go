@@ -50,6 +50,17 @@ func (r *ChannelRepo) ByExternalID(ctx context.Context, externalID string) (doma
 	return domain.OrgID(row.OrgID), row.Type, row.AccessToken, row.VerifyToken, true, nil
 }
 
+func (r *ChannelRepo) ByOrgAndType(ctx context.Context, orgID domain.OrgID, typ string) (string, []byte, bool, error) {
+	row, err := r.q.GetChannelByOrgAndType(ctx, gen.GetChannelByOrgAndTypeParams{OrgID: string(orgID), Type: typ})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil, false, nil
+	}
+	if err != nil {
+		return "", nil, false, err
+	}
+	return row.ExternalID, row.AccessToken, true, nil
+}
+
 func (r *ChannelRepo) OrgForVerifyToken(ctx context.Context, verifyToken string) (bool, error) {
 	_, err := r.q.GetChannelByVerifyToken(ctx, verifyToken)
 	if errors.Is(err, pgx.ErrNoRows) {

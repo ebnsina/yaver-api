@@ -9,11 +9,13 @@ import (
 
 	"github.com/ebnsina/yaver-api/internal/domain"
 	"github.com/ebnsina/yaver-api/internal/service/chat"
+	"github.com/ebnsina/yaver-api/internal/service/messaging"
 )
 
 type chatHandler struct {
 	log *slog.Logger
 	svc *chat.Service
+	msg *messaging.Service
 }
 
 type conversationDTO struct {
@@ -162,6 +164,63 @@ func (h *chatHandler) messages(w http.ResponseWriter, r *http.Request) {
 		body["insight"] = &dto
 	}
 	writeJSON(w, http.StatusOK, body)
+}
+
+// setStatus transitions a conversation (open | handling | closed) — e.g. a human
+// taking it over or closing it out.
+func (h *chatHandler) setStatus(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	err := h.svc.SetStatus(r.Context(), orgFromCtx(r), r.PathValue("id"), body.Status)
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	case errors.Is(err, domain.ErrFlowInvalid):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "status must be open, handling, or closed"})
+	case err != nil:
+		h.log.Error("chat set status", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+	default:
+		writeJSON(w, http.StatusOK, map[string]string{"status": body.Status})
+	}
+}
+
+// agentReply posts a human agent's reply into a conversation (marking it
+// "handling") and delivers it out over the messaging channel when applicable.
+func (h *chatHandler) agentReply(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Text == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "text required"})
+		return
+	}
+	convID := r.PathValue("id")
+	channel, externalUser, err := h.svc.AgentReply(r.Context(), orgFromCtx(r), convID, body.Text)
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	case err != nil:
+		h.log.Error("chat agent reply", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	// Deliver over the messaging channel; web-widget threads have no transport
+	// (the visitor reads the reply on their next widget fetch).
+	if channel == "whatsapp" || channel == "messenger" {
+		if err := h.msg.SendOutbound(r.Context(), orgFromCtx(r), channel, externalUser, body.Text); err != nil {
+			h.log.Error("deliver agent reply", "channel", channel, "err", err)
+			writeJSON(w, http.StatusOK, map[string]any{"status": "stored", "delivered": false})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "sent", "delivered": true})
 }
 
 // summarize (re)generates the AI insight for a conversation and returns it.

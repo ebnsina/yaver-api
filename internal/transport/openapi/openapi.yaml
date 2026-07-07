@@ -332,6 +332,70 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/BadRequest' }
 
+  /v1/chat/conversations/{id}/status:
+    put:
+      operationId: setConversationStatus
+      summary: Transition a conversation (open | handling | closed)
+      description: >
+        Setting "handling" hands the thread to a human — the assistant stops
+        auto-replying so it doesn't talk over the agent. "open" returns it to
+        the bot; "closed" ends it.
+      tags: [chat]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [open, handling, closed] }
+      responses:
+        '200': { description: Updated }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/chat/conversations/{id}/reply:
+    post:
+      operationId: agentReply
+      summary: Post a human agent's reply (takes the conversation over)
+      description: >
+        Records the agent's message (role "agent"), marks the conversation
+        "handling", and delivers the reply out over the messaging channel
+        (WhatsApp/Messenger). Web-widget threads have no external transport.
+      tags: [chat]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string }
+      responses:
+        '200':
+          description: Stored (and delivered when the channel supports it)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  delivered: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/BadRequest' }
+
   /v1/campaigns:
     get:
       operationId: listCampaigns
@@ -1035,7 +1099,7 @@ components:
       type: object
       required: [role, content, created_at]
       properties:
-        role: { type: string, enum: [user, assistant, system] }
+        role: { type: string, enum: [user, assistant, agent, system] }
         content: { type: string }
         created_at: { type: string, format: date-time }
     MessageList:
