@@ -277,6 +277,29 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/BadRequest' }
 
+  /v1/chat/conversations/{id}/summarize:
+    post:
+      operationId: summarizeConversation
+      summary: Generate (or refresh) the AI insight for a conversation
+      description: >
+        Distills the transcript into a summary, outcome, sentiment, and suggested
+        next action. Provider-agnostic; the result is cached and returned on the
+        conversation detail. Re-running overwrites the prior insight.
+      tags: [chat]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The generated insight
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationInsight'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/BadRequest' }
+
   /v1/campaigns:
     get:
       operationId: listCampaigns
@@ -867,6 +890,20 @@ components:
         messages:
           type: array
           items: { $ref: '#/components/schemas/ChatMessage' }
+        insight:
+          allOf:
+            - $ref: '#/components/schemas/ConversationInsight'
+          nullable: true
+          description: The cached AI insight, present once one has been generated.
+    ConversationInsight:
+      type: object
+      required: [summary, outcome, sentiment, next_action, created_at]
+      properties:
+        summary: { type: string }
+        outcome: { type: string, enum: [resolved, pending, sale, needs_human, unknown] }
+        sentiment: { type: string, enum: [positive, neutral, negative] }
+        next_action: { type: string }
+        created_at: { type: string, format: date-time }
     Campaign:
       type: object
       required: [id, name, status, target_count, created_at]

@@ -73,6 +73,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("POST /v1/chat/messages", ah.requireAuth(http.HandlerFunc(chh.send)))
 	mux.Handle("GET /v1/chat/conversations", ah.requireAuth(http.HandlerFunc(chh.list)))
 	mux.Handle("GET /v1/chat/conversations/{id}", ah.requireAuth(http.HandlerFunc(chh.messages)))
+	mux.Handle("POST /v1/chat/conversations/{id}/summarize", ah.requireAuth(http.HandlerFunc(chh.summarize)))
 	mux.Handle("GET /v1/chat/settings", ah.requireAuth(http.HandlerFunc(chh.getSettings)))
 	mux.Handle("PUT /v1/chat/settings", ah.requireAuth(http.HandlerFunc(chh.saveSettings)))
 

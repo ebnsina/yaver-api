@@ -110,7 +110,7 @@ func main() {
 		log.Error("unsupported YAVER_CHAT_PROVIDER (only 'builtin' is implemented)", "value", cfg.ChatProvider)
 		os.Exit(1)
 	}
-	chatSvc := chat.New(postgres.NewChatRepo(pool), postgres.NewChatSettingsRepo(pool), chatModel)
+	chatSvc := chat.New(postgres.NewChatRepo(pool), postgres.NewChatSettingsRepo(pool), chatModel, chatbuiltin.NewSummarizer(), postgres.NewInsightRepo(pool))
 
 	// Messaging channels — pluggable sender behind domain.MessagingSender.
 	var msgSender domain.MessagingSender

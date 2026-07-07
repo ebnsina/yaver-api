@@ -56,6 +56,43 @@ type ChatModel interface {
 	Reply(ctx context.Context, system string, history []Message) (string, error)
 }
 
+// ConversationInsight is AI enrichment for a conversation: the "money, not
+// metrics" read the merchant sees in the inbox instead of the raw transcript.
+type ConversationInsight struct {
+	Summary    string // 1–2 sentence recap
+	Outcome    string // resolved | pending | sale | needs_human | unknown
+	Sentiment  string // positive | neutral | negative
+	NextAction string // suggested next-best-action for the merchant
+	CreatedAt  time.Time
+}
+
+// Conversation outcome/sentiment vocabularies — the closed sets an insight uses.
+const (
+	OutcomeResolved   = "resolved"
+	OutcomePending    = "pending"
+	OutcomeSale       = "sale"
+	OutcomeNeedsHuman = "needs_human"
+	OutcomeUnknown    = "unknown"
+
+	SentimentPositive = "positive"
+	SentimentNeutral  = "neutral"
+	SentimentNegative = "negative"
+)
+
+// Summarizer distills a conversation into a ConversationInsight. Provider-
+// agnostic like ChatModel: the built-in heuristic today, an LLM adapter later.
+type Summarizer interface {
+	Summarize(ctx context.Context, history []Message) (ConversationInsight, error)
+}
+
+// InsightRepo persists the latest insight per conversation (one row, overwritten
+// on re-summarize).
+type InsightRepo interface {
+	Save(ctx context.Context, orgID OrgID, conversationID string, in ConversationInsight) error
+	// Get returns the insight and found=false if none has been generated yet.
+	Get(ctx context.Context, conversationID string) (in ConversationInsight, found bool, err error)
+}
+
 // ChatRepo persists conversations and messages.
 type ChatRepo interface {
 	CreateConversation(ctx context.Context, orgID OrgID, id string) error

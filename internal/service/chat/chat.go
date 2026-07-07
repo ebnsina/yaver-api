@@ -12,13 +12,15 @@ import (
 const defaultPrompt = "You are a friendly customer-support assistant for a Bangladeshi online store. Be concise and helpful."
 
 type Service struct {
-	repo     domain.ChatRepo
-	settings domain.ChatSettingsRepo
-	model    domain.ChatModel
+	repo       domain.ChatRepo
+	settings   domain.ChatSettingsRepo
+	model      domain.ChatModel
+	summarizer domain.Summarizer
+	insights   domain.InsightRepo
 }
 
-func New(repo domain.ChatRepo, settings domain.ChatSettingsRepo, model domain.ChatModel) *Service {
-	return &Service{repo: repo, settings: settings, model: model}
+func New(repo domain.ChatRepo, settings domain.ChatSettingsRepo, model domain.ChatModel, summarizer domain.Summarizer, insights domain.InsightRepo) *Service {
+	return &Service{repo: repo, settings: settings, model: model, summarizer: summarizer, insights: insights}
 }
 
 // Settings returns the org's chat/widget settings.
@@ -94,6 +96,40 @@ func (s *Service) Messages(ctx context.Context, orgID domain.OrgID, convID strin
 		return nil, err
 	}
 	return s.repo.Messages(ctx, convID)
+}
+
+// Summarize (re)generates the AI insight for a conversation and caches it. The
+// merchant triggers this from the inbox; re-running overwrites the prior insight.
+func (s *Service) Summarize(ctx context.Context, orgID domain.OrgID, convID string) (domain.ConversationInsight, error) {
+	if err := s.owns(ctx, orgID, convID); err != nil {
+		return domain.ConversationInsight{}, err
+	}
+	history, err := s.repo.Messages(ctx, convID)
+	if err != nil {
+		return domain.ConversationInsight{}, err
+	}
+	in, err := s.summarizer.Summarize(ctx, history)
+	if err != nil {
+		return domain.ConversationInsight{}, err
+	}
+	if err := s.insights.Save(ctx, orgID, convID, in); err != nil {
+		return domain.ConversationInsight{}, err
+	}
+	// Re-read so the response carries the DB-authoritative created_at.
+	saved, _, err := s.insights.Get(ctx, convID)
+	if err != nil {
+		return domain.ConversationInsight{}, err
+	}
+	return saved, nil
+}
+
+// Insight returns the cached insight for a conversation, or found=false if none
+// has been generated yet.
+func (s *Service) Insight(ctx context.Context, orgID domain.OrgID, convID string) (domain.ConversationInsight, bool, error) {
+	if err := s.owns(ctx, orgID, convID); err != nil {
+		return domain.ConversationInsight{}, false, err
+	}
+	return s.insights.Get(ctx, convID)
 }
 
 func (s *Service) owns(ctx context.Context, orgID domain.OrgID, convID string) error {

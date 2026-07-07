@@ -32,6 +32,24 @@ type messageDTO struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type insightDTO struct {
+	Summary    string `json:"summary"`
+	Outcome    string `json:"outcome"`
+	Sentiment  string `json:"sentiment"`
+	NextAction string `json:"next_action"`
+	CreatedAt  string `json:"created_at"`
+}
+
+func insightToDTO(in domain.ConversationInsight) insightDTO {
+	return insightDTO{
+		Summary:    in.Summary,
+		Outcome:    in.Outcome,
+		Sentiment:  in.Sentiment,
+		NextAction: in.NextAction,
+		CreatedAt:  in.CreatedAt.Format(time.RFC3339),
+	}
+}
+
 // send posts a user message and returns the assistant reply.
 func (h *chatHandler) send(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -135,5 +153,27 @@ func (h *chatHandler) messages(w http.ResponseWriter, r *http.Request) {
 	for _, m := range msgs {
 		out = append(out, messageDTO{Role: m.Role, Content: m.Content, CreatedAt: m.CreatedAt.Format(time.RFC3339)})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"messages": out})
+	body := map[string]any{"messages": out}
+	// Attach the cached AI insight if one has been generated.
+	if in, found, err := h.svc.Insight(r.Context(), orgFromCtx(r), r.PathValue("id")); err != nil {
+		h.log.Error("chat insight", "err", err)
+	} else if found {
+		dto := insightToDTO(in)
+		body["insight"] = &dto
+	}
+	writeJSON(w, http.StatusOK, body)
+}
+
+// summarize (re)generates the AI insight for a conversation and returns it.
+func (h *chatHandler) summarize(w http.ResponseWriter, r *http.Request) {
+	in, err := h.svc.Summarize(r.Context(), orgFromCtx(r), r.PathValue("id"))
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	case err != nil:
+		h.log.Error("chat summarize", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+	default:
+		writeJSON(w, http.StatusOK, insightToDTO(in))
+	}
 }

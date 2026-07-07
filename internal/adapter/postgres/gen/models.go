@@ -73,6 +73,16 @@ type Conversation struct {
 	ExternalUser *string
 }
 
+type ConversationInsight struct {
+	ConversationID string
+	OrgID          string
+	Summary        string
+	Outcome        string
+	Sentiment      string
+	NextAction     string
+	CreatedAt      time.Time
+}
+
 type CreditLedger struct {
 	ID        string
 	OrgID     string
