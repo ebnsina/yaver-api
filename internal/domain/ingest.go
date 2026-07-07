@@ -1,6 +1,17 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
+
+// APIKeyInfo is public metadata about a key (never the secret).
+type APIKeyInfo struct {
+	Prefix     string
+	Name       string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
 
 // IngestEvent is a normalized inbound merchant event ready to persist.
 type IngestEvent struct {
@@ -18,6 +29,7 @@ type APIKeyRepo interface {
 	// ByPrefix loads a key by its lookup prefix. found=false if absent.
 	ByPrefix(ctx context.Context, prefix string) (id, orgID string, secretHash []byte, found bool, err error)
 	Touch(ctx context.Context, id string) error
+	ListByOrg(ctx context.Context, orgID string) ([]APIKeyInfo, error)
 }
 
 // EventRepo stores inbound events idempotently.

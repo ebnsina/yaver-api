@@ -38,6 +38,23 @@ func (r *APIKeyRepo) Touch(ctx context.Context, id string) error {
 	return r.q.TouchAPIKey(ctx, id)
 }
 
+func (r *APIKeyRepo) ListByOrg(ctx context.Context, orgID string) ([]domain.APIKeyInfo, error) {
+	rows, err := r.q.ListAPIKeysByOrg(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.APIKeyInfo, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, domain.APIKeyInfo{
+			Prefix:     row.Prefix,
+			Name:       deref(row.Name),
+			CreatedAt:  row.CreatedAt,
+			LastUsedAt: row.LastUsedAt,
+		})
+	}
+	return out, nil
+}
+
 // EventRepo -------------------------------------------------------------------
 
 type EventRepo struct{ q *gen.Queries }

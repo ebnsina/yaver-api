@@ -186,6 +186,20 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /v1/settings/api-keys:
+    get:
+      operationId: listApiKeys
+      summary: List the org's API keys (metadata only)
+      tags: [settings]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Keys
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       operationId: createApiKey
       summary: Create an API key for the org (returned once)
@@ -365,6 +379,21 @@ components:
       required: [api_key]
       properties:
         api_key: { type: string }
+    ApiKeyInfo:
+      type: object
+      required: [prefix, name, created_at]
+      properties:
+        prefix: { type: string }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time, nullable: true }
+    ApiKeyList:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items: { $ref: '#/components/schemas/ApiKeyInfo' }
     WebhookConfig:
       type: object
       required: [configured, events]

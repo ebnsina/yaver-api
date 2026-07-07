@@ -7,6 +7,7 @@ package gen
 
 import (
 	"context"
+	"time"
 )
 
 const createAPIKey = `-- name: CreateAPIKey :exec
@@ -76,6 +77,43 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (strin
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const listAPIKeysByOrg = `-- name: ListAPIKeysByOrg :many
+SELECT prefix, name, created_at, last_used_at
+FROM api_keys WHERE org_id = $1 ORDER BY created_at DESC
+`
+
+type ListAPIKeysByOrgRow struct {
+	Prefix     string
+	Name       *string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
+
+func (q *Queries) ListAPIKeysByOrg(ctx context.Context, orgID string) ([]ListAPIKeysByOrgRow, error) {
+	rows, err := q.db.Query(ctx, listAPIKeysByOrg, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAPIKeysByOrgRow
+	for rows.Next() {
+		var i ListAPIKeysByOrgRow
+		if err := rows.Scan(
+			&i.Prefix,
+			&i.Name,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const touchAPIKey = `-- name: TouchAPIKey :exec

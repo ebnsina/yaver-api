@@ -51,6 +51,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 
 	// Authenticated actions on the caller's org (org resolved from the session).
 	mux.Handle("PUT /v1/settings/org", ah.requireAuth(http.HandlerFunc(ah.renameOrg)))
+	mux.Handle("GET /v1/settings/api-keys", ah.requireAuth(http.HandlerFunc(ih.listKeys)))
 	mux.Handle("POST /v1/settings/api-keys", ah.requireAuth(http.HandlerFunc(ih.mintKey)))
 	mux.Handle("GET /v1/settings/webhook", ah.requireAuth(http.HandlerFunc(wh.getEndpoint)))
 	mux.Handle("POST /v1/settings/webhook", ah.requireAuth(http.HandlerFunc(wh.setEndpoint)))

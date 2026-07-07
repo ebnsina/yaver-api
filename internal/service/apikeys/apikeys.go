@@ -24,6 +24,11 @@ func (s *Service) Mint(ctx context.Context, orgID domain.OrgID, name string) (fu
 	return full, nil
 }
 
+// List returns public metadata for an org's keys (never secrets).
+func (s *Service) List(ctx context.Context, orgID domain.OrgID) ([]domain.APIKeyInfo, error) {
+	return s.repo.ListByOrg(ctx, string(orgID))
+}
+
 // Authenticate resolves a presented key to its org. ok=false when the key is
 // malformed, unknown, or the hash doesn't match.
 func (s *Service) Authenticate(ctx context.Context, presented string) (orgID domain.OrgID, ok bool, err error) {
