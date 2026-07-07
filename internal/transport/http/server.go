@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/ebnsina/yaver-api/internal/domain"
 	"github.com/ebnsina/yaver-api/internal/service/apikeys"
@@ -41,6 +42,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, callsSvc *calls.Se
 	mux.HandleFunc("POST /v1/auth/otp/verify", ah.verifyOTP)
 	mux.HandleFunc("POST /v1/auth/logout", ah.logout)
 	mux.Handle("GET /v1/me", ah.requireAuth(http.HandlerFunc(ah.me)))
+	mux.Handle("GET /v1/calls", ah.requireAuth(http.HandlerFunc(ch.listCalls)))
 
 	// Merchant ingest (X-API-Key).
 	mux.Handle("POST /v1/events", ih.requireAPIKey(http.HandlerFunc(ih.postEvent)))
@@ -94,6 +96,36 @@ func (h *callsHandler) testCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"call_id": call.ID, "status": out.Status, "result": out.Result})
+}
+
+type callDTO struct {
+	ID        string `json:"id"`
+	Direction string `json:"direction"`
+	Status    string `json:"status"`
+	Result    string `json:"result"`
+	CreatedAt string `json:"created_at"`
+}
+
+// listCalls returns the org's recent calls. Phase 0 scopes to org_demo until
+// user→org onboarding exists.
+func (h *callsHandler) listCalls(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.List(r.Context(), "org_demo", 50)
+	if err != nil {
+		h.log.Error("list calls", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	out := make([]callDTO, 0, len(list))
+	for _, c := range list {
+		out = append(out, callDTO{
+			ID:        string(c.ID),
+			Direction: string(c.Direction),
+			Status:    string(c.Status),
+			Result:    c.Result,
+			CreatedAt: c.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"calls": out})
 }
 
 // placeCall enqueues a place_call job through the orchestrator (async path).

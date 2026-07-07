@@ -16,12 +16,21 @@ type Service struct {
 	ivr      *flowengine.IVR
 	provider domain.VoiceProvider
 	outcomes domain.OutcomeRepo
+	calls    domain.CallRepo
 	flows    domain.FlowRepo
 	clock    domain.Clock
 }
 
-func New(provider domain.VoiceProvider, outcomeRepo domain.OutcomeRepo, flowRepo domain.FlowRepo, clock domain.Clock) *Service {
-	return &Service{ivr: flowengine.NewIVR(), provider: provider, outcomes: outcomeRepo, flows: flowRepo, clock: clock}
+func New(provider domain.VoiceProvider, outcomeRepo domain.OutcomeRepo, callRepo domain.CallRepo, flowRepo domain.FlowRepo, clock domain.Clock) *Service {
+	return &Service{ivr: flowengine.NewIVR(), provider: provider, outcomes: outcomeRepo, calls: callRepo, flows: flowRepo, clock: clock}
+}
+
+// List returns recent calls for an org, newest first.
+func (s *Service) List(ctx context.Context, orgID domain.OrgID, limit int) ([]domain.Call, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	return s.calls.ListByOrg(ctx, orgID, limit)
 }
 
 // RunTestCall loads the named active flow, drives it with a simulated keypress

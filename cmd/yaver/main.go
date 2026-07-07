@@ -57,7 +57,7 @@ func main() {
 
 	flowRepo := postgres.NewFlowRepo(pool)
 	authSvc := auth.New(postgres.NewAuthRepo(pool), clock.Real{}, cfg.AuthSecret, cfg.Env)
-	callsSvc := calls.New(voicemock.New(log), postgres.NewOutcomeRepo(pool), flowRepo, clock.Real{})
+	callsSvc := calls.New(voicemock.New(log), postgres.NewOutcomeRepo(pool), postgres.NewCallRepo(pool), flowRepo, clock.Real{})
 
 	// Orchestrator: Hatchet (durable, fairness-keyed) or the in-process local
 	// dispatcher. Both satisfy domain.Orchestrator.

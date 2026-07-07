@@ -58,3 +58,45 @@ func (q *Queries) GetCall(ctx context.Context, id string) (Call, error) {
 	)
 	return i, err
 }
+
+const listCallsByOrg = `-- name: ListCallsByOrg :many
+SELECT id, org_id, flow_id, provider_call_id, direction, status, result, created_at
+FROM calls
+WHERE org_id = $1
+ORDER BY created_at DESC
+LIMIT $2
+`
+
+type ListCallsByOrgParams struct {
+	OrgID string
+	Limit int32
+}
+
+func (q *Queries) ListCallsByOrg(ctx context.Context, arg ListCallsByOrgParams) ([]Call, error) {
+	rows, err := q.db.Query(ctx, listCallsByOrg, arg.OrgID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Call
+	for rows.Next() {
+		var i Call
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrgID,
+			&i.FlowID,
+			&i.ProviderCallID,
+			&i.Direction,
+			&i.Status,
+			&i.Result,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

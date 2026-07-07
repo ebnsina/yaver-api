@@ -32,10 +32,11 @@ type Orchestrator interface {
 	EnqueuePlaceCall(ctx context.Context, in PlaceCallInput) error
 }
 
-// CallRepo persists voice interactions.
+// CallRepo persists and reads voice interactions.
 type CallRepo interface {
 	Create(ctx context.Context, c *Call) error
 	Get(ctx context.Context, id CallID) (*Call, error)
+	ListByOrg(ctx context.Context, orgID OrgID, limit int) ([]Call, error)
 }
 
 // FlowRepo loads flow definitions.

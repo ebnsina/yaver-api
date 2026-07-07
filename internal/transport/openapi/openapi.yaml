@@ -79,6 +79,22 @@ paths:
                 $ref: '#/components/schemas/Me'
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/calls:
+    get:
+      operationId: listCalls
+      summary: Recent calls for the authenticated org
+      tags: [calls]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Calls, newest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/events:
     post:
       operationId: ingestEvent
@@ -173,6 +189,24 @@ components:
         phone: { type: string }
         email: { type: string }
         name: { type: string }
+    Call:
+      type: object
+      required: [id, direction, status, result, created_at]
+      properties:
+        id: { type: string }
+        direction: { type: string, enum: [inbound, outbound] }
+        status:
+          type: string
+          enum: [queued, ringing, in_progress, completed, failed, no_answer]
+        result: { type: string }
+        created_at: { type: string, format: date-time }
+    CallList:
+      type: object
+      required: [calls]
+      properties:
+        calls:
+          type: array
+          items: { $ref: '#/components/schemas/Call' }
     EventRequest:
       type: object
       required: [event_type, event_id]

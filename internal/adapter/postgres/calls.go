@@ -49,6 +49,27 @@ func (r *CallRepo) Get(ctx context.Context, id domain.CallID) (*domain.Call, err
 	}, nil
 }
 
+func (r *CallRepo) ListByOrg(ctx context.Context, orgID domain.OrgID, limit int) ([]domain.Call, error) {
+	rows, err := r.q.ListCallsByOrg(ctx, gen.ListCallsByOrgParams{OrgID: string(orgID), Limit: int32(limit)})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Call, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, domain.Call{
+			ID:             domain.CallID(row.ID),
+			OrgID:          domain.OrgID(row.OrgID),
+			FlowID:         domain.FlowID(deref(row.FlowID)),
+			ProviderCallID: domain.ProviderCallID(deref(row.ProviderCallID)),
+			Direction:      domain.Direction(row.Direction),
+			Status:         domain.CallStatus(row.Status),
+			Result:         deref(row.Result),
+			CreatedAt:      row.CreatedAt,
+		})
+	}
+	return out, nil
+}
+
 // strPtr maps "" -> NULL so empty optional columns store as NULL.
 func strPtr(s string) *string {
 	if s == "" {
