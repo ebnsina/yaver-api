@@ -40,6 +40,9 @@ func New(repo domain.WebhookRepo, cipher *crypto.Cipher, log *slog.Logger) *Serv
 // SetEndpoint stores the merchant's delivery URL + a freshly generated signing
 // secret (encrypted at rest) and returns the secret once for them to save.
 func (s *Service) SetEndpoint(ctx context.Context, orgID domain.OrgID, url string, events []string) (secret string, err error) {
+	if events == nil {
+		events = []string{} // never NULL — the column is NOT NULL
+	}
 	secret = "whsec_" + randToken()
 	enc, err := s.cipher.Encrypt([]byte(secret))
 	if err != nil {
@@ -49,6 +52,15 @@ func (s *Service) SetEndpoint(ctx context.Context, orgID domain.OrgID, url strin
 		return "", err
 	}
 	return secret, nil
+}
+
+// Get returns the org's current webhook config (never the secret).
+func (s *Service) Get(ctx context.Context, orgID domain.OrgID) (url string, events []string, found bool, err error) {
+	ep, found, err := s.repo.GetEndpoint(ctx, string(orgID))
+	if err != nil || !found {
+		return "", nil, found, err
+	}
+	return ep.URL, ep.Events, true, nil
 }
 
 // Run drains the outbox and delivers due webhooks on a ticker until ctx is done.

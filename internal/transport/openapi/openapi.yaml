@@ -95,6 +95,59 @@ paths:
                 $ref: '#/components/schemas/CallList'
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/settings/api-keys:
+    post:
+      operationId: createApiKey
+      summary: Create an API key for the org (returned once)
+      tags: [settings]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: The new key (store it now — not retrievable later)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyResult'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/settings/webhook:
+    get:
+      operationId: getWebhook
+      summary: Current webhook config (no secret)
+      tags: [settings]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Webhook config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookConfig'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: setWebhook
+      summary: Set the webhook URL; returns a fresh signing secret once
+      tags: [settings]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookSet'
+      responses:
+        '200':
+          description: Saved; signing secret (store it now)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSecret'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/events:
     post:
       operationId: ingestEvent
@@ -189,6 +242,33 @@ components:
         phone: { type: string }
         email: { type: string }
         name: { type: string }
+    ApiKeyResult:
+      type: object
+      required: [api_key]
+      properties:
+        api_key: { type: string }
+    WebhookConfig:
+      type: object
+      required: [configured, events]
+      properties:
+        configured: { type: boolean }
+        url: { type: string }
+        events:
+          type: array
+          items: { type: string }
+    WebhookSet:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string }
+        events:
+          type: array
+          items: { type: string }
+    WebhookSecret:
+      type: object
+      required: [secret]
+      properties:
+        secret: { type: string }
     Call:
       type: object
       required: [id, direction, status, result, created_at]
