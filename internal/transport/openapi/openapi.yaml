@@ -1,0 +1,193 @@
+openapi: 3.1.0
+info:
+  title: Yaver API
+  version: 0.1.0
+  description: |
+    Public API for Yaver. Session-cookie auth for the dashboard; API keys for
+    server-to-server ingest. This spec is the source of truth for generated
+    clients (yaver-web) and partner SDKs.
+servers:
+  - url: /
+paths:
+  /v1/auth/otp/request:
+    post:
+      operationId: requestOtp
+      summary: Request a login OTP for a phone number
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpRequest'
+      responses:
+        '200':
+          description: Code sent (dev_code present only in dev)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OtpRequestResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/auth/otp/verify:
+    post:
+      operationId: verifyOtp
+      summary: Verify an OTP and start a session (sets an httpOnly cookie)
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpVerify'
+      responses:
+        '200':
+          description: Verified; session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionUser'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the current session
+      tags: [auth]
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+
+  /v1/me:
+    get:
+      operationId: getMe
+      summary: The authenticated user
+      tags: [auth]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/events:
+    post:
+      operationId: ingestEvent
+      summary: Ingest a merchant store event (triggers a call for order_placed)
+      tags: [ingest]
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventRequest'
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventAccepted'
+        '200':
+          description: Duplicate (idempotent no-op)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: yaver_session
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Status:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+    OtpRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone: { type: string, example: '01712345678' }
+    OtpRequestResult:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+        dev_code:
+          type: string
+          description: Present only in dev (no SMS provider yet)
+    OtpVerify:
+      type: object
+      required: [phone, code]
+      properties:
+        phone: { type: string }
+        code: { type: string }
+    SessionUser:
+      type: object
+      required: [user_id, phone]
+      properties:
+        user_id: { type: string }
+        phone: { type: string }
+    Me:
+      type: object
+      required: [user_id, phone, email, name]
+      properties:
+        user_id: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        name: { type: string }
+    EventRequest:
+      type: object
+      required: [event_type, event_id]
+      properties:
+        event_type:
+          type: string
+          enum: [order_placed, order_cancelled, abandoned_cart]
+        event_id: { type: string, description: Merchant-side unique id (idempotency) }
+        customer:
+          type: object
+          properties:
+            phone: { type: string }
+    EventAccepted:
+      type: object
+      required: [status, event_id]
+      properties:
+        status: { type: string }
+        event_id: { type: string }

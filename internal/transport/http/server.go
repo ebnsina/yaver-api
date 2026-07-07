@@ -14,6 +14,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/calls"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
 	"github.com/ebnsina/yaver-api/internal/service/webhooks"
+	"github.com/ebnsina/yaver-api/internal/transport/openapi"
 	"github.com/ebnsina/yaver-api/pkg/phone"
 )
 
@@ -29,6 +30,10 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, callsSvc *calls.Se
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+	mux.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write(openapi.Spec)
 	})
 
 	// Auth (phone-OTP + cookie sessions).
