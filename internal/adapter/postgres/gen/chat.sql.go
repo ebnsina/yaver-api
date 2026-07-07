@@ -10,6 +10,27 @@ import (
 	"time"
 )
 
+const createChannelConversation = `-- name: CreateChannelConversation :exec
+INSERT INTO conversations (id, org_id, channel, external_user) VALUES ($1, $2, $3, $4)
+`
+
+type CreateChannelConversationParams struct {
+	ID           string
+	OrgID        string
+	Channel      string
+	ExternalUser *string
+}
+
+func (q *Queries) CreateChannelConversation(ctx context.Context, arg CreateChannelConversationParams) error {
+	_, err := q.db.Exec(ctx, createChannelConversation,
+		arg.ID,
+		arg.OrgID,
+		arg.Channel,
+		arg.ExternalUser,
+	)
+	return err
+}
+
 const createConversation = `-- name: CreateConversation :exec
 INSERT INTO conversations (id, org_id) VALUES ($1, $2)
 `
@@ -22,6 +43,25 @@ type CreateConversationParams struct {
 func (q *Queries) CreateConversation(ctx context.Context, arg CreateConversationParams) error {
 	_, err := q.db.Exec(ctx, createConversation, arg.ID, arg.OrgID)
 	return err
+}
+
+const findOpenChannelConversation = `-- name: FindOpenChannelConversation :one
+SELECT id FROM conversations
+WHERE org_id = $1 AND channel = $2 AND external_user = $3 AND status = 'open'
+ORDER BY updated_at DESC LIMIT 1
+`
+
+type FindOpenChannelConversationParams struct {
+	OrgID        string
+	Channel      string
+	ExternalUser *string
+}
+
+func (q *Queries) FindOpenChannelConversation(ctx context.Context, arg FindOpenChannelConversationParams) (string, error) {
+	row := q.db.QueryRow(ctx, findOpenChannelConversation, arg.OrgID, arg.Channel, arg.ExternalUser)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getConversation = `-- name: GetConversation :one

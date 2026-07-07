@@ -20,6 +20,22 @@ func (r *ChatRepo) CreateConversation(ctx context.Context, orgID domain.OrgID, c
 	return r.q.CreateConversation(ctx, gen.CreateConversationParams{ID: cid, OrgID: string(orgID)})
 }
 
+func (r *ChatRepo) FindOrCreateChannelConversation(ctx context.Context, orgID domain.OrgID, channel, externalUser string) (string, error) {
+	existing, err := r.q.FindOpenChannelConversation(ctx, gen.FindOpenChannelConversationParams{
+		OrgID: string(orgID), Channel: channel, ExternalUser: strPtr(externalUser),
+	})
+	if err == nil {
+		return existing, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+	cid := id.New("conv")
+	return cid, r.q.CreateChannelConversation(ctx, gen.CreateChannelConversationParams{
+		ID: cid, OrgID: string(orgID), Channel: channel, ExternalUser: strPtr(externalUser),
+	})
+}
+
 func (r *ChatRepo) GetConversation(ctx context.Context, cid string) (domain.OrgID, string, bool, error) {
 	row, err := r.q.GetConversation(ctx, cid)
 	if errors.Is(err, pgx.ErrNoRows) {

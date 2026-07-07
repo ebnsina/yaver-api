@@ -44,12 +44,31 @@ func (s *Service) Send(ctx context.Context, orgID domain.OrgID, convID, text str
 		return "", "", err
 	}
 
-	if err := s.repo.AddMessage(ctx, convID, "user", text); err != nil {
+	reply, err := s.reply(ctx, orgID, convID, text)
+	if err != nil {
 		return "", "", err
+	}
+	return convID, reply, nil
+}
+
+// SendChannel handles an inbound message from a messaging channel (WhatsApp /
+// Messenger), threaded by the channel user, and returns the assistant reply.
+func (s *Service) SendChannel(ctx context.Context, orgID domain.OrgID, channel, externalUser, text string) (string, error) {
+	convID, err := s.repo.FindOrCreateChannelConversation(ctx, orgID, channel, externalUser)
+	if err != nil {
+		return "", err
+	}
+	return s.reply(ctx, orgID, convID, text)
+}
+
+// reply appends the user's message, generates + stores the assistant reply.
+func (s *Service) reply(ctx context.Context, orgID domain.OrgID, convID, text string) (string, error) {
+	if err := s.repo.AddMessage(ctx, convID, "user", text); err != nil {
+		return "", err
 	}
 	history, err := s.repo.Messages(ctx, convID)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	prompt := defaultPrompt
 	if cs, err := s.settings.Get(ctx, orgID); err == nil && cs.Instructions != "" {
@@ -57,12 +76,12 @@ func (s *Service) Send(ctx context.Context, orgID domain.OrgID, convID, text str
 	}
 	reply, err := s.model.Reply(ctx, prompt, history)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	if err := s.repo.AddMessage(ctx, convID, "assistant", reply); err != nil {
-		return "", "", err
+		return "", err
 	}
-	return convID, reply, nil
+	return reply, nil
 }
 
 func (s *Service) List(ctx context.Context, orgID domain.OrgID) ([]domain.Conversation, error) {

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	chatbuiltin "github.com/ebnsina/yaver-api/internal/adapter/chat/builtin"
+	logsender "github.com/ebnsina/yaver-api/internal/adapter/messaging/logsender"
+	metasender "github.com/ebnsina/yaver-api/internal/adapter/messaging/meta"
 	hatchetorch "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/hatchet"
 	orchlocal "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/local"
 	"github.com/ebnsina/yaver-api/internal/adapter/postgres"
@@ -31,6 +33,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/customers"
 	"github.com/ebnsina/yaver-api/internal/service/flows"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
+	"github.com/ebnsina/yaver-api/internal/service/messaging"
 	"github.com/ebnsina/yaver-api/internal/service/webhooks"
 	httptransport "github.com/ebnsina/yaver-api/internal/transport/http"
 	"github.com/ebnsina/yaver-api/pkg/crypto"
@@ -106,12 +109,25 @@ func main() {
 	}
 	chatSvc := chat.New(postgres.NewChatRepo(pool), postgres.NewChatSettingsRepo(pool), chatModel)
 
+	// Messaging channels — pluggable sender behind domain.MessagingSender.
+	var msgSender domain.MessagingSender
+	switch cfg.MsgSender {
+	case "log":
+		msgSender = logsender.New(log)
+	case "meta":
+		msgSender = metasender.New()
+	default:
+		log.Error("unsupported YAVER_MSG_SENDER (want 'log' or 'meta')", "value", cfg.MsgSender)
+		os.Exit(1)
+	}
+	msgSvc := messaging.New(postgres.NewChannelRepo(pool), chatSvc, msgSender, cipher, log)
+
 	// Webhook dispatcher: drains the outbox and delivers, on its own loop.
 	webhooksSvc := webhooks.New(postgres.NewWebhookRepo(pool), cipher, log)
 	go webhooksSvc.Run(context.Background())
 
 	orgProv := postgres.NewOrgRepo(pool)
-	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, keysSvc, ingestSvc, webhooksSvc, orch)
+	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, keysSvc, ingestSvc, webhooksSvc, orch)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,

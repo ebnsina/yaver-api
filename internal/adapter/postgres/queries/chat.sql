@@ -1,6 +1,14 @@
 -- name: CreateConversation :exec
 INSERT INTO conversations (id, org_id) VALUES ($1, $2);
 
+-- name: CreateChannelConversation :exec
+INSERT INTO conversations (id, org_id, channel, external_user) VALUES ($1, $2, $3, $4);
+
+-- name: FindOpenChannelConversation :one
+SELECT id FROM conversations
+WHERE org_id = $1 AND channel = $2 AND external_user = $3 AND status = 'open'
+ORDER BY updated_at DESC LIMIT 1;
+
 -- name: GetConversation :one
 SELECT id, org_id, channel, status, created_at, updated_at
 FROM conversations WHERE id = $1;

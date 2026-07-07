@@ -20,6 +20,7 @@ type Config struct {
 	Orchestrator  string // "local" | "hatchet"
 	EncryptionKey string // base64 32-byte AES-GCM master key (secrets at rest)
 	ChatProvider  string // "builtin" | "openai" | "anthropic" — provider-agnostic AI seam
+	MsgSender     string // "log" | "meta" — messaging (WhatsApp/Messenger) delivery
 }
 
 func Load() (Config, error) {
@@ -40,6 +41,7 @@ func Load() (Config, error) {
 		Orchestrator:  req("YAVER_ORCHESTRATOR"),
 		EncryptionKey: req("YAVER_ENCRYPTION_KEY"),
 		ChatProvider:  req("YAVER_CHAT_PROVIDER"),
+		MsgSender:     req("YAVER_MSG_SENDER"),
 	}
 
 	if len(missing) > 0 {

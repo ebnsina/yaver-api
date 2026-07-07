@@ -63,4 +63,7 @@ type ChatRepo interface {
 	ListConversations(ctx context.Context, orgID OrgID, limit int) ([]Conversation, error)
 	AddMessage(ctx context.Context, conversationID, role, content string) error
 	Messages(ctx context.Context, conversationID string) ([]Message, error)
+	// FindOrCreateChannelConversation returns the open conversation for a channel
+	// user (org, channel, externalUser), creating one if none is open.
+	FindOrCreateChannelConversation(ctx context.Context, orgID OrgID, channel, externalUser string) (id string, err error)
 }

@@ -43,6 +43,16 @@ type Campaign struct {
 	StartedAt   *time.Time
 }
 
+type ChannelConnection struct {
+	ID          string
+	OrgID       string
+	Type        string
+	ExternalID  string
+	AccessToken []byte
+	VerifyToken string
+	CreatedAt   time.Time
+}
+
 type ChatSetting struct {
 	OrgID        string
 	Instructions string
@@ -53,13 +63,14 @@ type ChatSetting struct {
 }
 
 type Conversation struct {
-	ID         string
-	OrgID      string
-	Channel    string
-	CustomerID *string
-	Status     string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID           string
+	OrgID        string
+	Channel      string
+	CustomerID   *string
+	Status       string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	ExternalUser *string
 }
 
 type Customer struct {

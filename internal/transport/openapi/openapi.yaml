@@ -148,6 +148,65 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/channels:
+    get:
+      operationId: listChannels
+      summary: Connected messaging channels (WhatsApp / Messenger)
+      tags: [channels]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Channels
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: connectChannel
+      summary: Connect a WhatsApp or Messenger channel
+      tags: [channels]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, external_id, access_token, verify_token]
+              properties:
+                type: { type: string, enum: [whatsapp, messenger] }
+                external_id: { type: string, description: WhatsApp phone_number_id or Messenger page_id }
+                access_token: { type: string }
+                verify_token: { type: string }
+      responses:
+        '200':
+          description: Connected
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/channels/{type}:
+    delete:
+      operationId: disconnectChannel
+      summary: Disconnect a channel
+      tags: [channels]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: type, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Disconnected
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/chat/settings:
     get:
       operationId: getChatSettings
@@ -700,6 +759,20 @@ components:
       required: [secret]
       properties:
         secret: { type: string }
+    Channel:
+      type: object
+      required: [type, external_id, created_at]
+      properties:
+        type: { type: string }
+        external_id: { type: string }
+        created_at: { type: string, format: date-time }
+    ChannelList:
+      type: object
+      required: [channels]
+      properties:
+        channels:
+          type: array
+          items: { $ref: '#/components/schemas/Channel' }
     ChatSettings:
       type: object
       required: [instructions, widget_title, welcome, accent]

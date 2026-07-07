@@ -18,6 +18,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/customers"
 	"github.com/ebnsina/yaver-api/internal/service/flows"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
+	"github.com/ebnsina/yaver-api/internal/service/messaging"
 	"github.com/ebnsina/yaver-api/internal/service/webhooks"
 	"github.com/ebnsina/yaver-api/internal/transport/openapi"
 	"github.com/ebnsina/yaver-api/pkg/phone"
@@ -25,7 +26,7 @@ import (
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
 // arrive with rate-limit in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
+func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
 	dev := env == "dev"
 	ah := &authHandler{log: log, svc: authSvc, orgs: orgStore, secure: !dev}
 	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
@@ -34,6 +35,8 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	cah := &campaignsHandler{log: log, svc: campSvc}
 	chh := &chatHandler{log: log, svc: chatSvc}
 	ph := &publicHandler{log: log, keys: keysSvc, chat: chatSvc}
+	cnh := &channelsHandler{log: log, svc: msgSvc}
+	mwh := &metaWebhookHandler{log: log, svc: msgSvc}
 	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc}
 	wh := &webhookHandler{log: log, svc: webhooksSvc}
 
@@ -85,6 +88,15 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("GET /v1/settings/api-keys", ah.requireAuth(http.HandlerFunc(ih.listKeys)))
 	mux.Handle("POST /v1/settings/api-keys", ah.requireAuth(http.HandlerFunc(ih.mintKey)))
 	mux.Handle("POST /v1/settings/publishable-key", ah.requireAuth(http.HandlerFunc(ih.mintPublishableKey)))
+
+	// Channels (WhatsApp / Messenger).
+	mux.Handle("GET /v1/channels", ah.requireAuth(http.HandlerFunc(cnh.list)))
+	mux.Handle("POST /v1/channels", ah.requireAuth(http.HandlerFunc(cnh.connect)))
+	mux.Handle("DELETE /v1/channels/{type}", ah.requireAuth(http.HandlerFunc(cnh.disconnect)))
+
+	// Meta webhook (inbound from WhatsApp / Messenger).
+	mux.Handle("GET /webhooks/meta", http.HandlerFunc(mwh.verify))
+	mux.Handle("POST /webhooks/meta", http.HandlerFunc(mwh.receive))
 
 	// Public widget surface (cross-origin, publishable-key auth).
 	mux.Handle("/public/chat/messages", cors(http.HandlerFunc(ph.chatSend)))
