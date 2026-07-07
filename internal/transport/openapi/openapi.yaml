@@ -117,6 +117,67 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/BadRequest' }
 
+  /v1/flows:
+    get:
+      operationId: listFlows
+      summary: The org's flows
+      tags: [flows]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Flows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/flows/{id}:
+    get:
+      operationId: getFlow
+      summary: A flow with its spec (for the builder)
+      tags: [flows]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Flow detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowDetail'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/BadRequest' }
+    put:
+      operationId: updateFlow
+      summary: Replace a flow's spec
+      tags: [flows]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [spec]
+              properties:
+                spec: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/analytics/summary:
     get:
       operationId: getSummary
@@ -416,6 +477,34 @@ components:
       required: [secret]
       properties:
         secret: { type: string }
+    FlowSummary:
+      type: object
+      required: [id, name, version, channel, type, active]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: integer }
+        channel: { type: string }
+        type: { type: string }
+        active: { type: boolean }
+    FlowList:
+      type: object
+      required: [flows]
+      properties:
+        flows:
+          type: array
+          items: { $ref: '#/components/schemas/FlowSummary' }
+    FlowDetail:
+      type: object
+      required: [id, name, version, channel, type, locale, spec]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: integer }
+        channel: { type: string }
+        type: { type: string }
+        locale: { type: string }
+        spec: { type: object, additionalProperties: true }
     Call:
       type: object
       required: [id, direction, status, result, created_at]

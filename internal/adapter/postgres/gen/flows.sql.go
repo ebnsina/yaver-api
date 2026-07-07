@@ -79,3 +79,91 @@ func (q *Queries) GetActiveFlowByName(ctx context.Context, arg GetActiveFlowByNa
 	)
 	return i, err
 }
+
+const getFlowByID = `-- name: GetFlowByID :one
+SELECT id, org_id, name, version, channel, type, locale, spec
+FROM flows WHERE id = $1
+`
+
+type GetFlowByIDRow struct {
+	ID      string
+	OrgID   string
+	Name    string
+	Version int32
+	Channel string
+	Type    string
+	Locale  string
+	Spec    []byte
+}
+
+func (q *Queries) GetFlowByID(ctx context.Context, id string) (GetFlowByIDRow, error) {
+	row := q.db.QueryRow(ctx, getFlowByID, id)
+	var i GetFlowByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.Name,
+		&i.Version,
+		&i.Channel,
+		&i.Type,
+		&i.Locale,
+		&i.Spec,
+	)
+	return i, err
+}
+
+const listFlowsByOrg = `-- name: ListFlowsByOrg :many
+SELECT id, name, version, channel, type, is_active
+FROM flows WHERE org_id = $1 ORDER BY name
+`
+
+type ListFlowsByOrgRow struct {
+	ID       string
+	Name     string
+	Version  int32
+	Channel  string
+	Type     string
+	IsActive bool
+}
+
+func (q *Queries) ListFlowsByOrg(ctx context.Context, orgID string) ([]ListFlowsByOrgRow, error) {
+	rows, err := q.db.Query(ctx, listFlowsByOrg, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFlowsByOrgRow
+	for rows.Next() {
+		var i ListFlowsByOrgRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Version,
+			&i.Channel,
+			&i.Type,
+			&i.IsActive,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateFlowSpec = `-- name: UpdateFlowSpec :exec
+UPDATE flows SET spec = $2 WHERE id = $1 AND org_id = $3
+`
+
+type UpdateFlowSpecParams struct {
+	ID    string
+	Spec  []byte
+	OrgID string
+}
+
+func (q *Queries) UpdateFlowSpec(ctx context.Context, arg UpdateFlowSpecParams) error {
+	_, err := q.db.Exec(ctx, updateFlowSpec, arg.ID, arg.Spec, arg.OrgID)
+	return err
+}

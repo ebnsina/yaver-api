@@ -43,3 +43,36 @@ func (r *FlowRepo) GetActiveFlow(ctx context.Context, orgID domain.OrgID, name s
 	}
 	return f, true, nil
 }
+
+func (r *FlowRepo) ListByOrg(ctx context.Context, orgID domain.OrgID) ([]domain.FlowSummary, error) {
+	rows, err := r.q.ListFlowsByOrg(ctx, string(orgID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.FlowSummary, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, domain.FlowSummary{
+			ID: domain.FlowID(row.ID), Name: row.Name, Version: int(row.Version),
+			Channel: domain.Channel(row.Channel), Type: domain.FlowType(row.Type), Active: row.IsActive,
+		})
+	}
+	return out, nil
+}
+
+func (r *FlowRepo) GetByID(ctx context.Context, id domain.FlowID) (domain.FlowDetail, bool, error) {
+	row, err := r.q.GetFlowByID(ctx, string(id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.FlowDetail{}, false, nil
+	}
+	if err != nil {
+		return domain.FlowDetail{}, false, err
+	}
+	return domain.FlowDetail{
+		ID: domain.FlowID(row.ID), OrgID: domain.OrgID(row.OrgID), Name: row.Name, Version: int(row.Version),
+		Channel: domain.Channel(row.Channel), Type: domain.FlowType(row.Type), Locale: row.Locale, Spec: row.Spec,
+	}, true, nil
+}
+
+func (r *FlowRepo) UpdateSpec(ctx context.Context, id domain.FlowID, orgID domain.OrgID, spec []byte) error {
+	return r.q.UpdateFlowSpec(ctx, gen.UpdateFlowSpecParams{ID: string(id), OrgID: string(orgID), Spec: spec})
+}
