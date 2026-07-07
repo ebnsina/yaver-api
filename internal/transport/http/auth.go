@@ -22,6 +22,7 @@ const userKey ctxKey = 0
 type authHandler struct {
 	log    *slog.Logger
 	svc    *auth.Service
+	orgs   domain.OrgProvisioner
 	secure bool // set the Secure cookie flag outside dev
 }
 
@@ -127,7 +128,16 @@ func (h *authHandler) requireAuth(next http.Handler) http.Handler {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			return
 		}
+		// Resolve (and lazily provision) the user's org — auto-provision on first
+		// authenticated request. Every authed handler reads the org from context.
+		orgID, err := h.orgs.EnsureForUser(r.Context(), su.UserID, "My Store")
+		if err != nil {
+			h.log.Error("ensure org", "err", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+			return
+		}
 		ctx := context.WithValue(r.Context(), userKey, su)
+		ctx = context.WithValue(ctx, orgKey, orgID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

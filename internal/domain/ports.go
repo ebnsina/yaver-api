@@ -39,6 +39,12 @@ type CallRepo interface {
 	ListByOrg(ctx context.Context, orgID OrgID, limit int) ([]Call, error)
 }
 
+// OrgProvisioner resolves (and lazily creates) the org for a user. Called on the
+// first authenticated request — the "auto-provision on first login" step.
+type OrgProvisioner interface {
+	EnsureForUser(ctx context.Context, userID, defaultName string) (OrgID, error)
+}
+
 // FlowRepo loads flow definitions.
 type FlowRepo interface {
 	// GetActiveFlow returns the active flow for (org, name). found=false if none.

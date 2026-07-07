@@ -9,6 +9,37 @@ import (
 	"context"
 )
 
+const createFlow = `-- name: CreateFlow :exec
+INSERT INTO flows (id, org_id, name, version, channel, type, locale, spec)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (id) DO NOTHING
+`
+
+type CreateFlowParams struct {
+	ID      string
+	OrgID   string
+	Name    string
+	Version int32
+	Channel string
+	Type    string
+	Locale  string
+	Spec    []byte
+}
+
+func (q *Queries) CreateFlow(ctx context.Context, arg CreateFlowParams) error {
+	_, err := q.db.Exec(ctx, createFlow,
+		arg.ID,
+		arg.OrgID,
+		arg.Name,
+		arg.Version,
+		arg.Channel,
+		arg.Type,
+		arg.Locale,
+		arg.Spec,
+	)
+	return err
+}
+
 const getActiveFlowByName = `-- name: GetActiveFlowByName :one
 SELECT id, org_id, name, version, channel, type, locale, spec
 FROM flows

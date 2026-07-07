@@ -90,7 +90,8 @@ func main() {
 	webhooksSvc := webhooks.New(postgres.NewWebhookRepo(pool), cipher, log)
 	go webhooksSvc.Run(context.Background())
 
-	handler := httptransport.New(log, cfg.Env, authSvc, callsSvc, keysSvc, ingestSvc, webhooksSvc, orch)
+	orgProv := postgres.NewOrgRepo(pool)
+	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, keysSvc, ingestSvc, webhooksSvc, orch)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,

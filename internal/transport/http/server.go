@@ -21,12 +21,12 @@ import (
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
 // arrive with rate-limit in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, callsSvc *calls.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
+func New(log *slog.Logger, env string, authSvc *auth.Service, orgProv domain.OrgProvisioner, callsSvc *calls.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
 	dev := env == "dev"
-	ah := &authHandler{log: log, svc: authSvc, secure: !dev}
+	ah := &authHandler{log: log, svc: authSvc, orgs: orgProv, secure: !dev}
 	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
-	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc, devMint: dev}
-	wh := &webhookHandler{log: log, svc: webhooksSvc, dev: dev}
+	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc}
+	wh := &webhookHandler{log: log, svc: webhooksSvc}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -44,16 +44,14 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, callsSvc *calls.Se
 	mux.Handle("GET /v1/me", ah.requireAuth(http.HandlerFunc(ah.me)))
 	mux.Handle("GET /v1/calls", ah.requireAuth(http.HandlerFunc(ch.listCalls)))
 
-	// Merchant ingest (X-API-Key).
+	// Merchant ingest (X-API-Key resolves the org).
 	mux.Handle("POST /v1/events", ih.requireAPIKey(http.HandlerFunc(ih.postEvent)))
-	mux.HandleFunc("POST /v1/dev/api-keys", ih.mintKey)
 
-	// Webhook config (dev sets the endpoint; dashboard settings in Phase 1).
-	mux.HandleFunc("POST /v1/dev/webhook", wh.setEndpoint)
-
-	// Dev endpoints (no telco): simulate a full flow, or enqueue place_call.
-	mux.HandleFunc("POST /v1/dev/test-call", ch.testCall)
-	mux.HandleFunc("POST /v1/dev/place-call", ch.placeCall)
+	// Authenticated actions on the caller's org (org resolved from the session).
+	mux.Handle("POST /v1/settings/api-keys", ah.requireAuth(http.HandlerFunc(ih.mintKey)))
+	mux.Handle("POST /v1/settings/webhook", ah.requireAuth(http.HandlerFunc(wh.setEndpoint)))
+	mux.Handle("POST /v1/dev/test-call", ah.requireAuth(http.HandlerFunc(ch.testCall)))
+	mux.Handle("POST /v1/dev/place-call", ah.requireAuth(http.HandlerFunc(ch.placeCall)))
 
 	return logRequests(log, mux)
 }
@@ -85,7 +83,7 @@ func (h *callsHandler) testCall(w http.ResponseWriter, r *http.Request) {
 	if req.Digit == "" {
 		req.Digit = "1"
 	}
-	out, call, err := h.svc.RunTestCall(r.Context(), "org_demo", e164, req.Digit, "order_confirm")
+	out, call, err := h.svc.RunTestCall(r.Context(), orgFromCtx(r), e164, req.Digit, "order_confirm")
 	if errors.Is(err, domain.ErrNotFound) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no active order_confirm flow"})
 		return
@@ -109,7 +107,7 @@ type callDTO struct {
 // listCalls returns the org's recent calls. Phase 0 scopes to org_demo until
 // user→org onboarding exists.
 func (h *callsHandler) listCalls(w http.ResponseWriter, r *http.Request) {
-	list, err := h.svc.List(r.Context(), "org_demo", 50)
+	list, err := h.svc.List(r.Context(), orgFromCtx(r), 50)
 	if err != nil {
 		h.log.Error("list calls", "err", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
@@ -143,14 +141,19 @@ func (h *callsHandler) placeCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.orch.EnqueuePlaceCall(r.Context(), domain.PlaceCallInput{
-		OrgID:   "org_demo",
+		OrgID:   orgFromCtx(r),
 		ToPhone: e164,
-		FlowID:  "flow_demo_order_confirm",
 	}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
+}
+
+// orgFromCtx reads the org injected by requireAuth (session) or requireAPIKey.
+func orgFromCtx(r *http.Request) domain.OrgID {
+	org, _ := r.Context().Value(orgKey).(domain.OrgID)
+	return org
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

@@ -16,10 +16,9 @@ import (
 const orgKey ctxKey = 1
 
 type ingestHandler struct {
-	log     *slog.Logger
-	keys    *apikeys.Service
-	ingest  *ingest.Service
-	devMint bool // expose the dev key-mint endpoint outside prod
+	log    *slog.Logger
+	keys   *apikeys.Service
+	ingest *ingest.Service
 }
 
 // requireAPIKey authenticates X-API-Key and injects the org.
@@ -81,13 +80,9 @@ func (h *ingestHandler) postEvent(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// mintKey is a dev-only helper to create an API key for org_demo.
+// mintKey creates an API key for the authenticated user's org and returns it once.
 func (h *ingestHandler) mintKey(w http.ResponseWriter, r *http.Request) {
-	if !h.devMint {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-		return
-	}
-	full, err := h.keys.Mint(r.Context(), "org_demo", "dev")
+	full, err := h.keys.Mint(r.Context(), orgFromCtx(r), "dashboard")
 	if err != nil {
 		h.log.Error("mint key", "err", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
