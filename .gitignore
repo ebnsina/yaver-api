@@ -1,0 +1,30 @@
+# Internal planning docs & local data — NOT committed (keep public repo clean)
+/docs/
+/data/
+
+# Secrets & env
+/secrets/
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+config.local.yaml
+config.yaml
+
+# Build artifacts
+/bin/
+/tmp/
+*.exe
+*.test
+*.out
+coverage*
+
+# Go
+vendor/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
