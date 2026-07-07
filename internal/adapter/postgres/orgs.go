@@ -62,6 +62,15 @@ func (r *OrgRepo) EnsureForUser(ctx context.Context, userID, name string) (domai
 	return domain.Org{ID: domain.OrgID(row.ID.String()), Name: row.Name}, nil
 }
 
+// OwnerEmail returns the org owner's email (empty if unset).
+func (r *OrgRepo) OwnerEmail(ctx context.Context, orgID domain.OrgID) (string, error) {
+	id, err := uuid.Parse(string(orgID))
+	if err != nil {
+		return "", err
+	}
+	return gen.New(r.pool).GetOrgOwnerEmail(ctx, id)
+}
+
 // Rename changes the org's display name.
 func (r *OrgRepo) Rename(ctx context.Context, orgID domain.OrgID, name string) error {
 	id, err := uuid.Parse(string(orgID))

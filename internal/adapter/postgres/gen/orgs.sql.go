@@ -43,6 +43,19 @@ func (q *Queries) GetOrgByOwner(ctx context.Context, ownerUserID uuid.UUID) (Get
 	return i, err
 }
 
+const getOrgOwnerEmail = `-- name: GetOrgOwnerEmail :one
+SELECT COALESCE(u.email, '') AS email
+FROM orgs o JOIN users u ON u.id = o.owner_user_id
+WHERE o.id = $1
+`
+
+func (q *Queries) GetOrgOwnerEmail(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getOrgOwnerEmail, id)
+	var email string
+	err := row.Scan(&email)
+	return email, err
+}
+
 const renameOrg = `-- name: RenameOrg :exec
 UPDATE orgs SET name = $2 WHERE id = $1
 `

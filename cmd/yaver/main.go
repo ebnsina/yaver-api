@@ -15,6 +15,8 @@ import (
 	"time"
 
 	chatbuiltin "github.com/ebnsina/yaver-api/internal/adapter/chat/builtin"
+	emaillog "github.com/ebnsina/yaver-api/internal/adapter/email/logsender"
+	emailresend "github.com/ebnsina/yaver-api/internal/adapter/email/resend"
 	reporterbuiltin "github.com/ebnsina/yaver-api/internal/adapter/reporter/builtin"
 	logsender "github.com/ebnsina/yaver-api/internal/adapter/messaging/logsender"
 	metasender "github.com/ebnsina/yaver-api/internal/adapter/messaging/meta"
@@ -37,6 +39,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/flows"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
 	"github.com/ebnsina/yaver-api/internal/service/messaging"
+	"github.com/ebnsina/yaver-api/internal/service/notify"
 	"github.com/ebnsina/yaver-api/internal/service/reports"
 	"github.com/ebnsina/yaver-api/internal/service/webhooks"
 	httptransport "github.com/ebnsina/yaver-api/internal/transport/http"
@@ -72,7 +75,22 @@ func main() {
 	creditRepo := postgres.NewCreditRepo(pool)
 	callRepo := postgres.NewCallRepo(pool)
 	callPolicyRepo := postgres.NewCallPolicyRepo(pool)
-	callsSvc := calls.New(voicemock.New(log), postgres.NewOutcomeRepo(pool), callRepo, flowRepo, creditRepo, callPolicyRepo, clock.Real{})
+	orgProv := postgres.NewOrgRepo(pool)
+
+	// Transactional email — pluggable sender behind domain.EmailSender.
+	var emailSender domain.EmailSender
+	switch cfg.EmailSender {
+	case "log":
+		emailSender = emaillog.New(log)
+	case "resend":
+		emailSender = emailresend.New(cfg.ResendAPIKey, cfg.EmailFrom)
+	default:
+		log.Error("unsupported YAVER_EMAIL_SENDER (want 'log' or 'resend')", "value", cfg.EmailSender)
+		os.Exit(1)
+	}
+	notifySvc := notify.New(log, emailSender, orgProv)
+
+	callsSvc := calls.New(voicemock.New(log), postgres.NewOutcomeRepo(pool), callRepo, flowRepo, creditRepo, callPolicyRepo, notifySvc, clock.Real{})
 	billingSvc := billing.New(creditRepo)
 	analyticsSvc := analytics.New(callRepo, creditRepo, postgres.NewAnalyticsRepo(pool))
 	reportsSvc := reports.New(analyticsSvc, reporterbuiltin.New())
@@ -136,7 +154,6 @@ func main() {
 	webhooksSvc := webhooks.New(postgres.NewWebhookRepo(pool), cipher, log)
 	go webhooksSvc.Run(context.Background())
 
-	orgProv := postgres.NewOrgRepo(pool)
 	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, billingSvc, analyticsSvc, reportsSvc, keysSvc, ingestSvc, webhooksSvc, orch)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

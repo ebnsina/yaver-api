@@ -7,3 +7,8 @@ ON CONFLICT (owner_user_id) DO NOTHING;
 
 -- name: RenameOrg :exec
 UPDATE orgs SET name = $2 WHERE id = $1;
+
+-- name: GetOrgOwnerEmail :one
+SELECT COALESCE(u.email, '') AS email
+FROM orgs o JOIN users u ON u.id = o.owner_user_id
+WHERE o.id = $1;

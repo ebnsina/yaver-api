@@ -59,6 +59,9 @@ type Org struct {
 type OrgStore interface {
 	EnsureForUser(ctx context.Context, userID, defaultName string) (Org, error)
 	Rename(ctx context.Context, orgID OrgID, name string) error
+	// OwnerEmail returns the org owner's email; empty string if the user hasn't
+	// set one (phone-first signup leaves it blank).
+	OwnerEmail(ctx context.Context, orgID OrgID) (string, error)
 }
 
 // FlowSummary is list metadata for a flow.

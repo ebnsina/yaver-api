@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+// LowBalanceThreshold is the credit level at or below which the merchant is
+// warned to top up. Shared by the metering (trigger) and notify (message) sides.
+const LowBalanceThreshold = 10
+
 // CreditEntry is one line in the credit ledger.
 type CreditEntry struct {
 	Delta     int

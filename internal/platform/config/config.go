@@ -21,6 +21,9 @@ type Config struct {
 	EncryptionKey string // base64 32-byte AES-GCM master key (secrets at rest)
 	ChatProvider  string // "builtin" | "openai" | "anthropic" — provider-agnostic AI seam
 	MsgSender     string // "log" | "meta" — messaging (WhatsApp/Messenger) delivery
+	EmailSender   string // "log" | "resend" — transactional email delivery
+	EmailFrom     string // From address for transactional email
+	ResendAPIKey  string // required only when EmailSender == "resend"
 }
 
 func Load() (Config, error) {
@@ -42,10 +45,16 @@ func Load() (Config, error) {
 		EncryptionKey: req("YAVER_ENCRYPTION_KEY"),
 		ChatProvider:  req("YAVER_CHAT_PROVIDER"),
 		MsgSender:     req("YAVER_MSG_SENDER"),
+		EmailSender:   req("YAVER_EMAIL_SENDER"),
+		EmailFrom:     req("YAVER_EMAIL_FROM"),
+		ResendAPIKey:  os.Getenv("YAVER_RESEND_API_KEY"), // optional; required by the resend adapter
 	}
 
 	if len(missing) > 0 {
 		return Config{}, fmt.Errorf("missing required env vars: %s", strings.Join(missing, ", "))
+	}
+	if cfg.EmailSender == "resend" && cfg.ResendAPIKey == "" {
+		return Config{}, fmt.Errorf("YAVER_RESEND_API_KEY is required when YAVER_EMAIL_SENDER=resend")
 	}
 	return cfg, nil
 }

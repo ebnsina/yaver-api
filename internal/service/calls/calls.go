@@ -23,11 +23,12 @@ type Service struct {
 	flows    domain.FlowRepo
 	credits  domain.CreditRepo
 	policy   domain.CallPolicyRepo
+	notifier domain.CreditNotifier
 	clock    domain.Clock
 }
 
-func New(provider domain.VoiceProvider, outcomeRepo domain.OutcomeRepo, callRepo domain.CallRepo, flowRepo domain.FlowRepo, credits domain.CreditRepo, policy domain.CallPolicyRepo, clock domain.Clock) *Service {
-	return &Service{ivr: flowengine.NewIVR(), provider: provider, outcomes: outcomeRepo, calls: callRepo, flows: flowRepo, credits: credits, policy: policy, clock: clock}
+func New(provider domain.VoiceProvider, outcomeRepo domain.OutcomeRepo, callRepo domain.CallRepo, flowRepo domain.FlowRepo, credits domain.CreditRepo, policy domain.CallPolicyRepo, notifier domain.CreditNotifier, clock domain.Clock) *Service {
+	return &Service{ivr: flowengine.NewIVR(), provider: provider, outcomes: outcomeRepo, calls: callRepo, flows: flowRepo, credits: credits, policy: policy, notifier: notifier, clock: clock}
 }
 
 // Policy returns the org's calling policy (defaults if unset).
@@ -141,10 +142,15 @@ func (s *Service) PlaceCall(ctx context.Context, in domain.PlaceCallInput) error
 	}
 
 	// Meter usage before dialing; skip (no call) if the org is out of credits.
-	if ok, _, err := s.credits.TryDeduct(ctx, in.OrgID, creditsPerCall, "call"); err != nil {
+	ok, balance, err := s.credits.TryDeduct(ctx, in.OrgID, creditsPerCall, "call")
+	if err != nil {
 		return err
 	} else if !ok {
 		return domain.ErrInsufficientCredits
+	}
+	// Warn the merchant exactly once, on the charge that crosses the threshold.
+	if balance <= domain.LowBalanceThreshold && balance+creditsPerCall > domain.LowBalanceThreshold {
+		s.notifier.LowBalance(ctx, in.OrgID, balance)
 	}
 
 	pid, err := s.provider.PlaceCall(ctx, domain.CallRequest{OrgID: in.OrgID, ToPhone: in.ToPhone})
