@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/ebnsina/yaver-api/internal/domain"
 	"github.com/ebnsina/yaver-api/internal/service/analytics"
 )
 
@@ -20,16 +21,10 @@ func pct(part, total int) int {
 	return int(float64(part) / float64(total) * 100)
 }
 
-// overview returns the cross-channel dashboard rollup: calls, conversations, and
-// credits, with the headline rates pre-computed for the UI.
-func (h *analyticsHandler) overview(w http.ResponseWriter, r *http.Request) {
-	o, err := h.svc.Overview(r.Context(), orgFromCtx(r))
-	if err != nil {
-		h.log.Error("analytics overview", "err", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
+// overviewDTO serializes the cross-channel rollup with headline rates
+// pre-computed for the UI. Shared by the analytics and reports handlers.
+func overviewDTO(o domain.AnalyticsOverview) map[string]any {
+	return map[string]any{
 		"calls": map[string]any{
 			"total":             o.Calls.Total,
 			"confirmed":         o.Calls.Confirmed,
@@ -51,5 +46,16 @@ func (h *analyticsHandler) overview(w http.ResponseWriter, r *http.Request) {
 			"spent_today": o.Credits.SpentToday,
 			"spent_30d":   o.Credits.Spent30d,
 		},
-	})
+	}
+}
+
+// overview returns the cross-channel dashboard rollup.
+func (h *analyticsHandler) overview(w http.ResponseWriter, r *http.Request) {
+	o, err := h.svc.Overview(r.Context(), orgFromCtx(r))
+	if err != nil {
+		h.log.Error("analytics overview", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	writeJSON(w, http.StatusOK, overviewDTO(o))
 }

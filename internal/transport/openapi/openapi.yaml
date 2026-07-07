@@ -537,6 +537,39 @@ paths:
                 $ref: '#/components/schemas/AnalyticsOverview'
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/reports/ask:
+    post:
+      operationId: askReport
+      summary: Ask a natural-language question over your metrics (AI custom reports)
+      description: >
+        Provider-agnostic. Returns a plain-language answer grounded in the org's
+        current call, conversation, and credit metrics, plus the underlying data.
+      tags: [analytics]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: { type: string, example: 'which channel recovered the most this week?' }
+      responses:
+        '200':
+          description: Answer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [answer, data]
+                properties:
+                  answer: { type: string }
+                  data: { $ref: '#/components/schemas/AnalyticsOverview' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/dev/test-call:
     post:
       operationId: testCall

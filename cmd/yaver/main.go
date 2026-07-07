@@ -15,6 +15,7 @@ import (
 	"time"
 
 	chatbuiltin "github.com/ebnsina/yaver-api/internal/adapter/chat/builtin"
+	reporterbuiltin "github.com/ebnsina/yaver-api/internal/adapter/reporter/builtin"
 	logsender "github.com/ebnsina/yaver-api/internal/adapter/messaging/logsender"
 	metasender "github.com/ebnsina/yaver-api/internal/adapter/messaging/meta"
 	hatchetorch "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/hatchet"
@@ -36,6 +37,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/flows"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
 	"github.com/ebnsina/yaver-api/internal/service/messaging"
+	"github.com/ebnsina/yaver-api/internal/service/reports"
 	"github.com/ebnsina/yaver-api/internal/service/webhooks"
 	httptransport "github.com/ebnsina/yaver-api/internal/transport/http"
 	"github.com/ebnsina/yaver-api/pkg/crypto"
@@ -72,6 +74,7 @@ func main() {
 	callsSvc := calls.New(voicemock.New(log), postgres.NewOutcomeRepo(pool), callRepo, flowRepo, creditRepo, clock.Real{})
 	billingSvc := billing.New(creditRepo)
 	analyticsSvc := analytics.New(callRepo, creditRepo, postgres.NewAnalyticsRepo(pool))
+	reportsSvc := reports.New(analyticsSvc, reporterbuiltin.New())
 	flowsSvc := flows.New(flowRepo)
 
 	// Orchestrator: Hatchet (durable, fairness-keyed) or the in-process local
@@ -133,7 +136,7 @@ func main() {
 	go webhooksSvc.Run(context.Background())
 
 	orgProv := postgres.NewOrgRepo(pool)
-	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, billingSvc, analyticsSvc, keysSvc, ingestSvc, webhooksSvc, orch)
+	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, billingSvc, analyticsSvc, reportsSvc, keysSvc, ingestSvc, webhooksSvc, orch)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,

@@ -21,6 +21,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/flows"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
 	"github.com/ebnsina/yaver-api/internal/service/messaging"
+	"github.com/ebnsina/yaver-api/internal/service/reports"
 	"github.com/ebnsina/yaver-api/internal/service/webhooks"
 	"github.com/ebnsina/yaver-api/internal/transport/openapi"
 	"github.com/ebnsina/yaver-api/pkg/phone"
@@ -28,7 +29,7 @@ import (
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
 // arrive with rate-limit in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
+func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service, reportsSvc *reports.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
 	dev := env == "dev"
 	ah := &authHandler{log: log, svc: authSvc, orgs: orgStore, secure: !dev}
 	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
@@ -41,6 +42,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mwh := &metaWebhookHandler{log: log, svc: msgSvc}
 	bh := &billingHandler{log: log, svc: billingSvc}
 	anh := &analyticsHandler{log: log, svc: analyticsSvc}
+	rph := &reportsHandler{log: log, svc: reportsSvc}
 	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc}
 	wh := &webhookHandler{log: log, svc: webhooksSvc}
 
@@ -62,6 +64,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("GET /v1/calls/{id}", ah.requireAuth(http.HandlerFunc(ch.getCall)))
 	mux.Handle("GET /v1/analytics/summary", ah.requireAuth(http.HandlerFunc(ch.summary)))
 	mux.Handle("GET /v1/analytics/overview", ah.requireAuth(http.HandlerFunc(anh.overview)))
+	mux.Handle("POST /v1/reports/ask", ah.requireAuth(http.HandlerFunc(rph.ask)))
 
 	// Billing (credits).
 	mux.Handle("GET /v1/billing", ah.requireAuth(http.HandlerFunc(bh.get)))
