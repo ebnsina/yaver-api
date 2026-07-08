@@ -160,6 +160,7 @@ make sqlc        # regenerate typed queries from SQL
 make up / down   # docker compose infra (Postgres)
 make migrate-up  # goose migrations (also: migrate-down, migrate-status)
 make hatchet-up  # run the self-hosted Hatchet engine (also: hatchet-down)
+make loadtest    # k6 load test (deploy/k6/loadtest.js)
 ```
 
 ### Orchestrator (Hatchet)

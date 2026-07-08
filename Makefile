@@ -1,4 +1,4 @@
-.PHONY: build run test lint tidy sqlc up down migrate-up migrate-down migrate-status hatchet-up hatchet-down
+.PHONY: build run test lint tidy sqlc up down migrate-up migrate-down migrate-status hatchet-up hatchet-down loadtest
 
 # Load .env (gitignored) for local dev if present, so targets have the required
 # env without hardcoded defaults. In prod, env is supplied by the platform.
@@ -48,3 +48,7 @@ hatchet-up:
 
 hatchet-down:
 	docker compose -f deploy/hatchet/docker-compose.yml down
+
+# Load test (requires k6). Override BASE_URL/PUBLISHABLE_KEY/API_KEY via env.
+loadtest:
+	k6 run deploy/k6/loadtest.js
