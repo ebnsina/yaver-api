@@ -19,6 +19,11 @@ type Config struct {
 	AuthSecret     string // HMAC key for OTP hashing (min 32 bytes recommended)
 	Orchestrator   string // "local" | "hatchet"
 	EncryptionKey  string // base64 32-byte AES-GCM master key (secrets at rest)
+	VoiceProvider  string // "mock" (dev, no telco) | "livekit" — telephony
+	LiveKitURL     string // required when VoiceProvider == "livekit"
+	LiveKitKey     string
+	LiveKitSecret  string
+	LiveKitTrunkID string // outbound SIP trunk id
 	ChatProvider   string // "builtin" | "openai" | "anthropic" — provider-agnostic AI seam
 	AnthropicKey   string // required only when ChatProvider == "anthropic"
 	AnthropicModel string // optional; defaults to claude-opus-4-8 in the adapter
@@ -51,6 +56,11 @@ func Load() (Config, error) {
 		AuthSecret:     req("YAVER_AUTH_SECRET"),
 		Orchestrator:   req("YAVER_ORCHESTRATOR"),
 		EncryptionKey:  req("YAVER_ENCRYPTION_KEY"),
+		VoiceProvider:  req("YAVER_VOICE_PROVIDER"),
+		LiveKitURL:     os.Getenv("YAVER_LIVEKIT_URL"),
+		LiveKitKey:     os.Getenv("YAVER_LIVEKIT_API_KEY"),
+		LiveKitSecret:  os.Getenv("YAVER_LIVEKIT_API_SECRET"),
+		LiveKitTrunkID: os.Getenv("YAVER_LIVEKIT_SIP_TRUNK_ID"),
 		ChatProvider:   req("YAVER_CHAT_PROVIDER"),
 		AnthropicKey:   os.Getenv("YAVER_ANTHROPIC_API_KEY"), // optional; required by the anthropic adapter
 		AnthropicModel: os.Getenv("YAVER_ANTHROPIC_MODEL"),   // optional; adapter defaults to claude-opus-4-8
@@ -74,6 +84,9 @@ func Load() (Config, error) {
 	}
 	if cfg.ChatProvider == "anthropic" && cfg.AnthropicKey == "" {
 		return Config{}, fmt.Errorf("YAVER_ANTHROPIC_API_KEY is required when YAVER_CHAT_PROVIDER=anthropic")
+	}
+	if cfg.VoiceProvider == "livekit" && (cfg.LiveKitURL == "" || cfg.LiveKitKey == "" || cfg.LiveKitSecret == "" || cfg.LiveKitTrunkID == "") {
+		return Config{}, fmt.Errorf("YAVER_LIVEKIT_URL/API_KEY/API_SECRET/SIP_TRUNK_ID are required when YAVER_VOICE_PROVIDER=livekit")
 	}
 	if cfg.PaymentGateway == "sslcommerz" && (cfg.SSLCzStoreID == "" || cfg.SSLCzStorePass == "") {
 		return Config{}, fmt.Errorf("YAVER_SSLCOMMERZ_STORE_ID and YAVER_SSLCOMMERZ_STORE_PASSWD are required when YAVER_PAYMENT_GATEWAY=sslcommerz")

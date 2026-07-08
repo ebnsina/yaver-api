@@ -26,6 +26,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/adapter/payment/sslcommerz"
 	"github.com/ebnsina/yaver-api/internal/adapter/postgres"
 	reporterbuiltin "github.com/ebnsina/yaver-api/internal/adapter/reporter/builtin"
+	voicelivekit "github.com/ebnsina/yaver-api/internal/adapter/voice/livekit"
 	voicemock "github.com/ebnsina/yaver-api/internal/adapter/voice/mock"
 	"github.com/ebnsina/yaver-api/internal/domain"
 	"github.com/ebnsina/yaver-api/internal/platform/bus"
@@ -97,7 +98,19 @@ func main() {
 	// In-process live-activity bus: services publish, the SSE handler subscribes.
 	activityBus := bus.New()
 
-	callsSvc := calls.New(voicemock.New(log), postgres.NewOutcomeRepo(pool), callRepo, flowRepo, creditRepo, callPolicyRepo, notifySvc, clock.Real{}, activityBus)
+	// Telephony: mock (dev, no telco) or LiveKit SIP (dials via the BD trunk).
+	var voice domain.VoiceProvider
+	switch cfg.VoiceProvider {
+	case "mock":
+		voice = voicemock.New(log)
+	case "livekit":
+		voice = voicelivekit.New(cfg.LiveKitURL, cfg.LiveKitKey, cfg.LiveKitSecret, cfg.LiveKitTrunkID, log)
+	default:
+		log.Error("unsupported YAVER_VOICE_PROVIDER (want 'mock' or 'livekit')", "value", cfg.VoiceProvider)
+		os.Exit(1)
+	}
+
+	callsSvc := calls.New(voice, postgres.NewOutcomeRepo(pool), callRepo, flowRepo, creditRepo, callPolicyRepo, notifySvc, clock.Real{}, activityBus)
 
 	// Payment gateway for credit top-ups — "mock" (dev, no real money) or the
 	// SSLCommerz aggregator (cards + bKash/Nagad/Rocket behind one checkout).
