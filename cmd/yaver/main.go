@@ -31,10 +31,13 @@ import (
 	voicelivekit "github.com/ebnsina/yaver-api/internal/adapter/voice/livekit"
 	voicemock "github.com/ebnsina/yaver-api/internal/adapter/voice/mock"
 	"github.com/ebnsina/yaver-api/internal/domain"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	"github.com/ebnsina/yaver-api/internal/platform/bus"
 	"github.com/ebnsina/yaver-api/internal/platform/clock"
 	"github.com/ebnsina/yaver-api/internal/platform/config"
 	"github.com/ebnsina/yaver-api/internal/platform/db"
+	otelplatform "github.com/ebnsina/yaver-api/internal/platform/otel"
 	"github.com/ebnsina/yaver-api/internal/service/analytics"
 	"github.com/ebnsina/yaver-api/internal/service/apikeys"
 	"github.com/ebnsina/yaver-api/internal/service/auth"
@@ -61,6 +64,13 @@ func main() {
 		log.Error("config load failed", "err", err)
 		os.Exit(1)
 	}
+
+	// Tracing (opt-in via OTEL_EXPORTER_OTLP_ENDPOINT). Non-fatal on failure.
+	otelShutdown, err := otelplatform.Setup(context.Background(), "yaver-api")
+	if err != nil {
+		log.Error("otel setup", "err", err)
+	}
+	defer func() { _ = otelShutdown(context.Background()) }()
 
 	// DB pool (lazy: dials on first query, so boot doesn't require a live DB).
 	pool, err := db.Open(context.Background(), cfg.DatabaseURL)
@@ -208,7 +218,7 @@ func main() {
 	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, billingSvc, analyticsSvc, reportsSvc, keysSvc, ingestSvc, webhooksSvc, orch, activityBus, onboardingSvc, cfg.WebURL)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           handler,
+		Handler:           otelhttp.NewHandler(handler, "http"),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

@@ -29,6 +29,9 @@ repo **[`yaver-web`](../yaver-web)**.
 - **Real-time activity feed** — an org-scoped Server-Sent Events stream
   (`/v1/activity/stream`) pushes calls and chat messages to the dashboard live,
   fed by an in-process pub/sub bus behind a swappable port.
+- **Tracing** — OpenTelemetry HTTP request spans, opt-in via an OTLP endpoint
+  (standard `OTEL_*` env), exporting to any OTel backend (Grafana Tempo, Jaeger,
+  Honeycomb, …).
 
 ## Architecture
 
