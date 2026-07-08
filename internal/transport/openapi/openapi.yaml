@@ -801,6 +801,29 @@ paths:
                 $ref: '#/components/schemas/AnalyticsOverview'
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/activity/stream:
+    get:
+      operationId: streamActivity
+      summary: Live activity feed (Server-Sent Events)
+      description: >
+        A long-lived Server-Sent Events stream of the org's live activity —
+        calls completing, chat messages arriving. Each event is a default SSE
+        `message` frame whose JSON `data` carries `{ type, title, detail, at }`
+        (`type` discriminates the kind, e.g. `call.completed`, `chat.message`).
+        The server also sends `: ping` comments as heartbeats. Subscribe with the
+        browser EventSource API.
+      tags: [analytics]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: An event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/reports/ask:
     post:
       operationId: askReport

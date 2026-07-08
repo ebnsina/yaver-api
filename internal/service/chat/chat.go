@@ -17,10 +17,27 @@ type Service struct {
 	model      domain.ChatModel
 	summarizer domain.Summarizer
 	insights   domain.InsightRepo
+	activity   domain.ActivityPublisher
 }
 
-func New(repo domain.ChatRepo, settings domain.ChatSettingsRepo, model domain.ChatModel, summarizer domain.Summarizer, insights domain.InsightRepo) *Service {
-	return &Service{repo: repo, settings: settings, model: model, summarizer: summarizer, insights: insights}
+func New(repo domain.ChatRepo, settings domain.ChatSettingsRepo, model domain.ChatModel, summarizer domain.Summarizer, insights domain.InsightRepo, activity domain.ActivityPublisher) *Service {
+	return &Service{repo: repo, settings: settings, model: model, summarizer: summarizer, insights: insights, activity: activity}
+}
+
+// publish emits a live-feed event, tolerating a nil publisher (tests, feed off).
+func (s *Service) publish(ctx context.Context, e domain.ActivityEvent) {
+	if s.activity != nil {
+		s.activity.PublishActivity(ctx, e)
+	}
+}
+
+// preview trims a message to a short single-line snippet for the activity feed.
+func preview(text string) string {
+	const max = 80
+	if len(text) > max {
+		return text[:max] + "…"
+	}
+	return text
 }
 
 // Settings returns the org's chat/widget settings.
@@ -70,6 +87,12 @@ func (s *Service) reply(ctx context.Context, orgID domain.OrgID, convID, text st
 	if err := s.repo.AddMessage(ctx, convID, "user", text); err != nil {
 		return "", err
 	}
+	s.publish(ctx, domain.ActivityEvent{
+		Type:   "chat.message",
+		OrgID:  orgID,
+		Title:  "New chat message",
+		Detail: preview(text),
+	})
 	if _, status, _, err := s.repo.GetConversation(ctx, convID); err != nil {
 		return "", err
 	} else if status == domain.ConvHandling {

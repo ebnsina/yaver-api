@@ -55,7 +55,7 @@ func (m *fakeModel) Reply(context.Context, string, []domain.Message) (string, er
 }
 
 func newSvc(repo *fakeChatRepo, model *fakeModel) *Service {
-	return New(repo, fakeSettings{}, model, nil, nil)
+	return New(repo, fakeSettings{}, model, nil, nil, nil)
 }
 
 func TestAssistantRepliesWhenOpen(t *testing.T) {

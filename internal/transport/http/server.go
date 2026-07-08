@@ -29,7 +29,7 @@ import (
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
 // arrive with rate-limit in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service, reportsSvc *reports.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator) http.Handler {
+func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service, reportsSvc *reports.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator, activitySub domain.ActivitySubscriber) http.Handler {
 	dev := env == "dev"
 	ah := &authHandler{log: log, svc: authSvc, orgs: orgStore, secure: !dev}
 	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
@@ -45,6 +45,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	rph := &reportsHandler{log: log, svc: reportsSvc}
 	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc}
 	wh := &webhookHandler{log: log, svc: webhooksSvc}
+	acth := &activityHandler{log: log, subs: activitySub}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -66,6 +67,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("PUT /v1/settings/call-policy", ah.requireAuth(http.HandlerFunc(ch.savePolicy)))
 	mux.Handle("GET /v1/analytics/summary", ah.requireAuth(http.HandlerFunc(ch.summary)))
 	mux.Handle("GET /v1/analytics/overview", ah.requireAuth(http.HandlerFunc(anh.overview)))
+	mux.Handle("GET /v1/activity/stream", ah.requireAuth(http.HandlerFunc(acth.stream)))
 	mux.Handle("POST /v1/reports/ask", ah.requireAuth(http.HandlerFunc(rph.ask)))
 
 	// Billing (credits).

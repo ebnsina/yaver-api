@@ -17,14 +17,15 @@ import (
 	chatbuiltin "github.com/ebnsina/yaver-api/internal/adapter/chat/builtin"
 	emaillog "github.com/ebnsina/yaver-api/internal/adapter/email/logsender"
 	emailresend "github.com/ebnsina/yaver-api/internal/adapter/email/resend"
-	reporterbuiltin "github.com/ebnsina/yaver-api/internal/adapter/reporter/builtin"
 	logsender "github.com/ebnsina/yaver-api/internal/adapter/messaging/logsender"
 	metasender "github.com/ebnsina/yaver-api/internal/adapter/messaging/meta"
 	hatchetorch "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/hatchet"
 	orchlocal "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/local"
 	"github.com/ebnsina/yaver-api/internal/adapter/postgres"
+	reporterbuiltin "github.com/ebnsina/yaver-api/internal/adapter/reporter/builtin"
 	voicemock "github.com/ebnsina/yaver-api/internal/adapter/voice/mock"
 	"github.com/ebnsina/yaver-api/internal/domain"
+	"github.com/ebnsina/yaver-api/internal/platform/bus"
 	"github.com/ebnsina/yaver-api/internal/platform/clock"
 	"github.com/ebnsina/yaver-api/internal/platform/config"
 	"github.com/ebnsina/yaver-api/internal/platform/db"
@@ -90,7 +91,10 @@ func main() {
 	}
 	notifySvc := notify.New(log, emailSender, orgProv)
 
-	callsSvc := calls.New(voicemock.New(log), postgres.NewOutcomeRepo(pool), callRepo, flowRepo, creditRepo, callPolicyRepo, notifySvc, clock.Real{})
+	// In-process live-activity bus: services publish, the SSE handler subscribes.
+	activityBus := bus.New()
+
+	callsSvc := calls.New(voicemock.New(log), postgres.NewOutcomeRepo(pool), callRepo, flowRepo, creditRepo, callPolicyRepo, notifySvc, clock.Real{}, activityBus)
 	billingSvc := billing.New(creditRepo)
 	analyticsSvc := analytics.New(callRepo, creditRepo, postgres.NewAnalyticsRepo(pool))
 	reportsSvc := reports.New(analyticsSvc, reporterbuiltin.New())
@@ -135,7 +139,7 @@ func main() {
 		log.Error("unsupported YAVER_CHAT_PROVIDER (only 'builtin' is implemented)", "value", cfg.ChatProvider)
 		os.Exit(1)
 	}
-	chatSvc := chat.New(postgres.NewChatRepo(pool), postgres.NewChatSettingsRepo(pool), chatModel, chatbuiltin.NewSummarizer(), postgres.NewInsightRepo(pool))
+	chatSvc := chat.New(postgres.NewChatRepo(pool), postgres.NewChatSettingsRepo(pool), chatModel, chatbuiltin.NewSummarizer(), postgres.NewInsightRepo(pool), activityBus)
 
 	// Messaging channels — pluggable sender behind domain.MessagingSender.
 	var msgSender domain.MessagingSender
@@ -154,7 +158,7 @@ func main() {
 	webhooksSvc := webhooks.New(postgres.NewWebhookRepo(pool), cipher, log)
 	go webhooksSvc.Run(context.Background())
 
-	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, billingSvc, analyticsSvc, reportsSvc, keysSvc, ingestSvc, webhooksSvc, orch)
+	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, billingSvc, analyticsSvc, reportsSvc, keysSvc, ingestSvc, webhooksSvc, orch, activityBus)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,

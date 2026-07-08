@@ -25,10 +25,11 @@ type Service struct {
 	policy   domain.CallPolicyRepo
 	notifier domain.CreditNotifier
 	clock    domain.Clock
+	activity domain.ActivityPublisher
 }
 
-func New(provider domain.VoiceProvider, outcomeRepo domain.OutcomeRepo, callRepo domain.CallRepo, flowRepo domain.FlowRepo, credits domain.CreditRepo, policy domain.CallPolicyRepo, notifier domain.CreditNotifier, clock domain.Clock) *Service {
-	return &Service{ivr: flowengine.NewIVR(), provider: provider, outcomes: outcomeRepo, calls: callRepo, flows: flowRepo, credits: credits, policy: policy, notifier: notifier, clock: clock}
+func New(provider domain.VoiceProvider, outcomeRepo domain.OutcomeRepo, callRepo domain.CallRepo, flowRepo domain.FlowRepo, credits domain.CreditRepo, policy domain.CallPolicyRepo, notifier domain.CreditNotifier, clock domain.Clock, activity domain.ActivityPublisher) *Service {
+	return &Service{ivr: flowengine.NewIVR(), provider: provider, outcomes: outcomeRepo, calls: callRepo, flows: flowRepo, credits: credits, policy: policy, notifier: notifier, clock: clock, activity: activity}
 }
 
 // Policy returns the org's calling policy (defaults if unset).
@@ -112,7 +113,21 @@ func (s *Service) RunTestCall(ctx context.Context, orgID domain.OrgID, toPhone, 
 	if err := s.outcomes.RecordCallOutcome(ctx, call, outcomeEvent(call)); err != nil {
 		return nil, nil, err
 	}
+	s.publish(ctx, domain.ActivityEvent{
+		Type:   "call." + string(call.Status),
+		OrgID:  orgID,
+		Title:  "Call " + string(call.Status),
+		Detail: call.Result,
+		At:     call.CreatedAt,
+	})
 	return out, call, nil
+}
+
+// publish emits a live-feed event, tolerating a nil publisher (tests, feed off).
+func (s *Service) publish(ctx context.Context, e domain.ActivityEvent) {
+	if s.activity != nil {
+		s.activity.PublishActivity(ctx, e)
+	}
 }
 
 // outcomeEvent builds the webhook payload for a terminal call.
