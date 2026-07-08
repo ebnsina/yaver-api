@@ -1,4 +1,4 @@
-.PHONY: build run test lint tidy sqlc up down migrate-up migrate-down migrate-status
+.PHONY: build run test lint tidy sqlc up down migrate-up migrate-down migrate-status hatchet-up hatchet-down
 
 # Load .env (gitignored) for local dev if present, so targets have the required
 # env without hardcoded defaults. In prod, env is supplied by the platform.
@@ -39,3 +39,12 @@ migrate-down:
 
 migrate-status:
 	go run ./cmd/migrate status
+
+# Self-hosted Hatchet (lite) — the durable orchestrator. After `make hatchet-up`,
+# create an API token in its dashboard (:8888), export HATCHET_CLIENT_TOKEN +
+# HATCHET_CLIENT_TLS_STRATEGY=none, and run with YAVER_ORCHESTRATOR=hatchet.
+hatchet-up:
+	docker compose -f deploy/hatchet/docker-compose.yml up -d
+
+hatchet-down:
+	docker compose -f deploy/hatchet/docker-compose.yml down

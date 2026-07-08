@@ -156,7 +156,25 @@ make lint        # go vet ./...
 make sqlc        # regenerate typed queries from SQL
 make up / down   # docker compose infra (Postgres)
 make migrate-up  # goose migrations (also: migrate-down, migrate-status)
+make hatchet-up  # run the self-hosted Hatchet engine (also: hatchet-down)
 ```
+
+### Orchestrator (Hatchet)
+
+Background jobs (e.g. `place_call`) run through `domain.Orchestrator`. The
+default is the in-process `local` dispatcher (no deps). For durable, fairness-
+keyed execution with retries and a dashboard, run the self-hosted Hatchet
+engine and switch to it:
+
+```sh
+make hatchet-up          # engine + its own Postgres (dashboard :8888, gRPC :7077)
+# create an API token in the dashboard, then:
+export HATCHET_CLIENT_TOKEN=<token> HATCHET_CLIENT_TLS_STRATEGY=none
+YAVER_ORCHESTRATOR=hatchet make run
+```
+
+The `place_call` task carries a per-merchant fairness key (`input.orgId`,
+round-robin) so one merchant can't monopolize call slots.
 
 Conventions: thin transport, thin adapters, fat services, pure domain. Typed
 sentinel errors live in `domain` and map to HTTP status codes in one place.
