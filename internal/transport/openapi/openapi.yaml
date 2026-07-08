@@ -29,6 +29,54 @@ paths:
                 $ref: '#/components/schemas/OtpRequestResult'
         '400': { $ref: '#/components/responses/BadRequest' }
 
+  /v1/auth/register:
+    post:
+      operationId: register
+      summary: Create an email/password account and sign in
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                name: { type: string }
+      responses:
+        '200':
+          description: Signed in (sets the session cookie)
+          content:
+            application/json:
+              schema: { type: object, properties: { user_id: { type: string }, email: { type: string } } }
+        '400': { description: Email and an 8+ character password are required }
+        '409': { description: Email already registered }
+
+  /v1/auth/login:
+    post:
+      operationId: login
+      summary: Sign in with email/password
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Signed in (sets the session cookie)
+          content:
+            application/json:
+              schema: { type: object, properties: { user_id: { type: string }, email: { type: string } } }
+        '401': { description: Invalid email or password }
+
   /v1/auth/otp/verify:
     post:
       operationId: verifyOtp

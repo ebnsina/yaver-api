@@ -13,10 +13,16 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ebnsina/yaver-api/internal/domain"
 )
+
+// minPasswordLen is the shortest password we accept at registration.
+const minPasswordLen = 8
 
 const (
 	otpTTL      = 5 * time.Minute
@@ -75,7 +81,45 @@ func (s *Service) VerifyOTP(ctx context.Context, phone, code string) (token stri
 	if err != nil {
 		return "", domain.SessionUser{}, err
 	}
-	token = randomToken()
+	return s.issueSession(ctx, user)
+}
+
+// Register creates an email/password account and logs it in. Returns
+// ErrEmailTaken if the email is in use, ErrInvalidCredentials if the password
+// is too weak.
+func (s *Service) Register(ctx context.Context, email, password, name string) (token string, su domain.SessionUser, err error) {
+	email = strings.TrimSpace(strings.ToLower(email))
+	if email == "" || len(password) < minPasswordLen {
+		return "", domain.SessionUser{}, domain.ErrInvalidCredentials
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", domain.SessionUser{}, err
+	}
+	user, err := s.repo.CreateUserWithPassword(ctx, email, strings.TrimSpace(name), hash)
+	if err != nil {
+		return "", domain.SessionUser{}, err // may be ErrEmailTaken
+	}
+	return s.issueSession(ctx, user)
+}
+
+// Login verifies email/password and issues a session. Returns
+// ErrInvalidCredentials for any mismatch (never leaks which part was wrong).
+func (s *Service) Login(ctx context.Context, email, password string) (token string, su domain.SessionUser, err error) {
+	user, hash, found, err := s.repo.UserByEmail(ctx, strings.TrimSpace(strings.ToLower(email)))
+	if err != nil {
+		return "", domain.SessionUser{}, err
+	}
+	if !found || len(hash) == 0 || bcrypt.CompareHashAndPassword(hash, []byte(password)) != nil {
+		return "", domain.SessionUser{}, domain.ErrInvalidCredentials
+	}
+	return s.issueSession(ctx, user)
+}
+
+// issueSession mints a session token for a user and returns it with the resolved
+// session identity.
+func (s *Service) issueSession(ctx context.Context, user domain.User) (string, domain.SessionUser, error) {
+	token := randomToken()
 	exp := s.clock.Now().Add(sessionTTL)
 	if err := s.repo.CreateSession(ctx, hashToken(token), user.ID, exp); err != nil {
 		return "", domain.SessionUser{}, err

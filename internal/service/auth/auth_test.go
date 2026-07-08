@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/hex"
+	"strconv"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 // fakeRepo is an in-memory domain.AuthRepo for testing the service logic.
 type fakeRepo struct {
 	users    map[string]domain.User
+	pwHashes map[string][]byte     // email -> bcrypt hash
 	otps     map[string]*storedOTP // keyed by phone (latest)
 	sessions map[string]string     // tokenHashHex -> userID
 	seq      int
@@ -26,7 +28,7 @@ type storedOTP struct {
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{users: map[string]domain.User{}, otps: map[string]*storedOTP{}, sessions: map[string]string{}}
+	return &fakeRepo{users: map[string]domain.User{}, pwHashes: map[string][]byte{}, otps: map[string]*storedOTP{}, sessions: map[string]string{}}
 }
 
 func (r *fakeRepo) UpsertUserByPhone(_ context.Context, phone string) (domain.User, error) {
@@ -37,6 +39,52 @@ func (r *fakeRepo) UpsertUserByPhone(_ context.Context, phone string) (domain.Us
 	u := domain.User{ID: "user_" + hex.EncodeToString([]byte{byte(r.seq)}), Phone: phone}
 	r.users[phone] = u
 	return u, nil
+}
+
+func TestRegisterThenLogin(t *testing.T) {
+	svc := New(newFakeRepo(), fixedClock{time.Unix(1_700_000_000, 0)}, "test-secret", "prod", &fakeSMS{})
+	ctx := context.Background()
+
+	if _, _, err := svc.Register(ctx, "M@Store.io", "hunter2!!", "Merchant"); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	// Duplicate email (case-insensitive) is rejected.
+	if _, _, err := svc.Register(ctx, "m@store.io", "another88", ""); err != domain.ErrEmailTaken {
+		t.Fatalf("want ErrEmailTaken, got %v", err)
+	}
+	// Too-short password is rejected.
+	if _, _, err := svc.Register(ctx, "new@x.io", "short", ""); err != domain.ErrInvalidCredentials {
+		t.Fatalf("weak password should fail, got %v", err)
+	}
+	// Login succeeds with the right password, fails with the wrong one.
+	if _, su, err := svc.Login(ctx, "m@store.io", "hunter2!!"); err != nil || su.Email != "m@store.io" {
+		t.Fatalf("login: %v su=%+v", err, su)
+	}
+	if _, _, err := svc.Login(ctx, "m@store.io", "wrongpass"); err != domain.ErrInvalidCredentials {
+		t.Fatalf("wrong password should fail, got %v", err)
+	}
+	if _, _, err := svc.Login(ctx, "ghost@x.io", "whatever9"); err != domain.ErrInvalidCredentials {
+		t.Fatalf("unknown email should fail, got %v", err)
+	}
+}
+
+func (r *fakeRepo) CreateUserWithPassword(_ context.Context, email, name string, hash []byte) (domain.User, error) {
+	if _, ok := r.users["email:"+email]; ok {
+		return domain.User{}, domain.ErrEmailTaken
+	}
+	r.seq++
+	u := domain.User{ID: "u" + strconv.Itoa(r.seq), Email: email, Name: name}
+	r.users["email:"+email] = u
+	r.pwHashes[email] = hash
+	return u, nil
+}
+
+func (r *fakeRepo) UserByEmail(_ context.Context, email string) (domain.User, []byte, bool, error) {
+	u, ok := r.users["email:"+email]
+	if !ok {
+		return domain.User{}, nil, false, nil
+	}
+	return u, r.pwHashes[email], true, nil
 }
 
 func (r *fakeRepo) InsertOTP(_ context.Context, phone string, hash []byte, exp time.Time) error {

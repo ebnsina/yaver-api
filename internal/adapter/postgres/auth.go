@@ -10,18 +10,58 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ebnsina/yaver-api/internal/adapter/postgres/gen"
 	"github.com/ebnsina/yaver-api/internal/domain"
 )
 
+// AuthRepo mixes sqlc-generated queries (phone/OTP paths) with a few raw pgx
+// queries for the email/password path — where users may have a NULL phone that
+// the phone-typed generated columns can't scan.
 type AuthRepo struct {
-	q *gen.Queries
+	q    *gen.Queries
+	pool *pgxpool.Pool
 }
 
 func NewAuthRepo(pool *pgxpool.Pool) *AuthRepo {
-	return &AuthRepo{q: gen.New(pool)}
+	return &AuthRepo{q: gen.New(pool), pool: pool}
+}
+
+// CreateUserWithPassword inserts an email/password user.
+func (r *AuthRepo) CreateUserWithPassword(ctx context.Context, email, name string, passwordHash []byte) (domain.User, error) {
+	var id uuid.UUID
+	err := r.pool.QueryRow(ctx,
+		`INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3) RETURNING id`,
+		email, name, passwordHash).Scan(&id)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
+		return domain.User{}, domain.ErrEmailTaken
+	}
+	if err != nil {
+		return domain.User{}, err
+	}
+	return domain.User{ID: id.String(), Email: email, Name: name}, nil
+}
+
+// UserByEmail loads a user and bcrypt hash by email (case-insensitive).
+func (r *AuthRepo) UserByEmail(ctx context.Context, email string) (domain.User, []byte, bool, error) {
+	var (
+		id              uuid.UUID
+		phone, em, name *string
+		hash            []byte
+	)
+	err := r.pool.QueryRow(ctx,
+		`SELECT id, phone, email, name, password_hash FROM users WHERE lower(email) = lower($1)`, email).
+		Scan(&id, &phone, &em, &name, &hash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.User{}, nil, false, nil
+	}
+	if err != nil {
+		return domain.User{}, nil, false, err
+	}
+	return domain.User{ID: id.String(), Phone: deref(phone), Email: deref(em), Name: deref(name)}, hash, true, nil
 }
 
 func (r *AuthRepo) UpsertUserByPhone(ctx context.Context, phone string) (domain.User, error) {
@@ -73,7 +113,17 @@ func (r *AuthRepo) CreateSession(ctx context.Context, tokenHash []byte, userID s
 }
 
 func (r *AuthRepo) SessionUser(ctx context.Context, tokenHash []byte) (domain.SessionUser, bool, error) {
-	row, err := r.q.SessionWithUser(ctx, tokenHash)
+	// Raw (not sqlc) so a NULL phone — email/password users — scans cleanly.
+	var (
+		userID             uuid.UUID
+		phone, email, name *string
+		exp                time.Time
+	)
+	err := r.pool.QueryRow(ctx,
+		`SELECT u.id, u.phone, u.email, u.name, s.expires_at
+		 FROM sessions s JOIN users u ON u.id = s.user_id
+		 WHERE s.token_hash = $1 AND s.expires_at > now()`, tokenHash).
+		Scan(&userID, &phone, &email, &name, &exp)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.SessionUser{}, false, nil
 	}
@@ -81,11 +131,11 @@ func (r *AuthRepo) SessionUser(ctx context.Context, tokenHash []byte) (domain.Se
 		return domain.SessionUser{}, false, err
 	}
 	return domain.SessionUser{
-		UserID:    row.UserID.String(),
-		Phone:     row.Phone,
-		Email:     deref(row.Email),
-		Name:      deref(row.Name),
-		ExpiresAt: row.ExpiresAt,
+		UserID:    userID.String(),
+		Phone:     deref(phone),
+		Email:     deref(email),
+		Name:      deref(name),
+		ExpiresAt: exp,
 	}, true, nil
 }
 

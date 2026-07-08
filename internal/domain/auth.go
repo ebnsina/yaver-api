@@ -38,6 +38,11 @@ type AuthRepo interface {
 	LatestLiveOTP(ctx context.Context, phone string) (otp OTP, found bool, err error)
 	IncrementOTPAttempts(ctx context.Context, otpID string) error
 	ConsumeOTP(ctx context.Context, otpID string) error
+	// CreateUserWithPassword registers an email/password user. Returns
+	// ErrEmailTaken if the email already exists.
+	CreateUserWithPassword(ctx context.Context, email, name string, passwordHash []byte) (User, error)
+	// UserByEmail loads a user and its bcrypt hash by email (case-insensitive).
+	UserByEmail(ctx context.Context, email string) (u User, passwordHash []byte, found bool, err error)
 	CreateSession(ctx context.Context, tokenHash []byte, userID string, expiresAt time.Time) error
 	// SessionUser resolves a session by token hash. found=false when absent/expired.
 	SessionUser(ctx context.Context, tokenHash []byte) (su SessionUser, found bool, err error)

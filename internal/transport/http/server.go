@@ -68,6 +68,8 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	// Auth (phone-OTP + cookie sessions).
 	mux.Handle("POST /v1/auth/otp/request", authLimit.Middleware(http.HandlerFunc(ah.requestOTP)))
 	mux.Handle("POST /v1/auth/otp/verify", authLimit.Middleware(http.HandlerFunc(ah.verifyOTP)))
+	mux.Handle("POST /v1/auth/register", authLimit.Middleware(http.HandlerFunc(ah.register)))
+	mux.Handle("POST /v1/auth/login", authLimit.Middleware(http.HandlerFunc(ah.login)))
 	mux.HandleFunc("POST /v1/auth/logout", ah.logout)
 	mux.Handle("GET /v1/me", ah.requireAuth(http.HandlerFunc(ah.me)))
 	mux.Handle("GET /v1/calls", ah.requireAuth(http.HandlerFunc(ch.listCalls)))

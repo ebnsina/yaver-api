@@ -83,6 +83,12 @@ func (h *authHandler) verifyOTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
+	h.setSessionCookie(w, token, su.ExpiresAt)
+	writeJSON(w, http.StatusOK, map[string]any{"user_id": su.UserID, "phone": su.Phone})
+}
+
+// setSessionCookie writes the httpOnly session cookie (secure in prod).
+func (h *authHandler) setSessionCookie(w http.ResponseWriter, token string, exp time.Time) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    token,
@@ -90,9 +96,60 @@ func (h *authHandler) verifyOTP(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		Secure:   h.secure,
 		SameSite: http.SameSiteLaxMode,
-		Expires:  su.ExpiresAt,
+		Expires:  exp,
 	})
-	writeJSON(w, http.StatusOK, map[string]any{"user_id": su.UserID, "phone": su.Phone})
+}
+
+type credsBody struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Name     string `json:"name"`
+}
+
+// register creates an email/password account and logs it in.
+func (h *authHandler) register(w http.ResponseWriter, r *http.Request) {
+	var body credsBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	token, su, err := h.svc.Register(r.Context(), body.Email, body.Password, body.Name)
+	if errors.Is(err, domain.ErrEmailTaken) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "email already registered"})
+		return
+	}
+	if errors.Is(err, domain.ErrInvalidCredentials) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email and an 8+ character password are required"})
+		return
+	}
+	if err != nil {
+		h.log.Error("register", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	h.setSessionCookie(w, token, su.ExpiresAt)
+	writeJSON(w, http.StatusOK, map[string]any{"user_id": su.UserID, "email": su.Email})
+}
+
+// login verifies email/password and issues a session.
+func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
+	var body credsBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	token, su, err := h.svc.Login(r.Context(), body.Email, body.Password)
+	if errors.Is(err, domain.ErrInvalidCredentials) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
+		return
+	}
+	if err != nil {
+		h.log.Error("login", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	h.setSessionCookie(w, token, su.ExpiresAt)
+	writeJSON(w, http.StatusOK, map[string]any{"user_id": su.UserID, "email": su.Email})
 }
 
 func (h *authHandler) logout(w http.ResponseWriter, r *http.Request) {
