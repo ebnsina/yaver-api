@@ -163,6 +163,24 @@ make hatchet-up  # run the self-hosted Hatchet engine (also: hatchet-down)
 make loadtest    # k6 load test (deploy/k6/loadtest.js)
 ```
 
+### Voice pipeline
+
+Telephony is layered so the deterministic IVR logic stays pure and testable:
+
+- **`VoiceProvider`** places the outbound call (mock, or LiveKit SIP over the BD
+  trunk — §Config).
+- **`flowengine.RunSession`** is the media-pipeline control loop: it drives a flow
+  over a **`Leg`** (`Play` / `SayGather` / `Hangup`) to an outcome — the same loop
+  whether the leg is a test keypad or live audio.
+- **`STT`** transcribes the recording (`/v1/calls/{id}/transcribe`), stored on the
+  call for the dashboard and AI reports.
+
+The one piece that needs a live LiveKit server to finish is the **LiveKit `Leg`
+implementation** — the audio/DTMF bridge (publish TTS/prompts, capture keypresses,
+start recording egress) that a LiveKit Agent runs inside the call room. Everything
+above it (the runtime, transcription, retention, outbound dial) is done and tested;
+inbound calls are the same runtime driven from an inbound room.
+
 ### Orchestrator (Hatchet)
 
 Background jobs (e.g. `place_call`) run through `domain.Orchestrator`. The
