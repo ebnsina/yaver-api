@@ -22,6 +22,8 @@ import (
 	metasender "github.com/ebnsina/yaver-api/internal/adapter/messaging/meta"
 	hatchetorch "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/hatchet"
 	orchlocal "github.com/ebnsina/yaver-api/internal/adapter/orchestrator/local"
+	paymentmock "github.com/ebnsina/yaver-api/internal/adapter/payment/mock"
+	"github.com/ebnsina/yaver-api/internal/adapter/payment/sslcommerz"
 	"github.com/ebnsina/yaver-api/internal/adapter/postgres"
 	reporterbuiltin "github.com/ebnsina/yaver-api/internal/adapter/reporter/builtin"
 	voicemock "github.com/ebnsina/yaver-api/internal/adapter/voice/mock"
@@ -96,7 +98,20 @@ func main() {
 	activityBus := bus.New()
 
 	callsSvc := calls.New(voicemock.New(log), postgres.NewOutcomeRepo(pool), callRepo, flowRepo, creditRepo, callPolicyRepo, notifySvc, clock.Real{}, activityBus)
-	billingSvc := billing.New(creditRepo)
+
+	// Payment gateway for credit top-ups — "mock" (dev, no real money) or the
+	// SSLCommerz aggregator (cards + bKash/Nagad/Rocket behind one checkout).
+	var gateway domain.PaymentGateway
+	switch cfg.PaymentGateway {
+	case "mock":
+		gateway = paymentmock.New(cfg.AppURL)
+	case "sslcommerz":
+		gateway = sslcommerz.New(cfg.SSLCzStoreID, cfg.SSLCzStorePass, cfg.AppURL, cfg.SSLCzSandbox)
+	default:
+		log.Error("unsupported YAVER_PAYMENT_GATEWAY (want 'mock' or 'sslcommerz')", "value", cfg.PaymentGateway)
+		os.Exit(1)
+	}
+	billingSvc := billing.New(creditRepo, postgres.NewPaymentRepo(pool), gateway)
 	analyticsSvc := analytics.New(callRepo, creditRepo, postgres.NewAnalyticsRepo(pool))
 	reportsSvc := reports.New(analyticsSvc, reporterbuiltin.New())
 	flowsSvc := flows.New(flowRepo)

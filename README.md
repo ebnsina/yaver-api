@@ -19,7 +19,9 @@ repo **[`yaver-web`](../yaver-web)**.
   due-sweep worker.
 - **Human takeover** — agents can take over an AI conversation; auto-reply is
   suppressed while a human is handling it.
-- **Billing** — prepaid credits, low-balance email alerts, top-ups.
+- **Billing** — prepaid credits, low-balance email alerts, and top-ups via a
+  gateway port (SSLCommerz in prod — cards + bKash/Nagad/Rocket; a mock gateway
+  for dev). Credits are granted only on a gateway-authenticated IPN, idempotently.
 - **Analytics & reports** — an overview endpoint plus a natural-language
   "ask" endpoint over the org's activity.
 - **Real-time activity feed** — an org-scoped Server-Sent Events stream
@@ -104,6 +106,9 @@ defaults — the app fails to boot if a required var is missing. Copy
 | `YAVER_MSG_SENDER` | `log` (dev) or `meta` (WhatsApp/Messenger Graph API) |
 | `YAVER_EMAIL_SENDER` | `log` (dev) or `resend` |
 | `YAVER_EMAIL_FROM` | From address for transactional email |
+| `YAVER_PAYMENT_GATEWAY` | `mock` (dev) or `sslcommerz` (cards + bKash/Nagad/Rocket) |
+| `YAVER_APP_URL` | Public base URL for gateway redirect/IPN callbacks |
+| `YAVER_SSLCOMMERZ_STORE_ID` / `_STORE_PASSWD` / `_SANDBOX` | Required for the `sslcommerz` gateway |
 
 For `hatchet`, also set `HATCHET_CLIENT_TOKEN` and
 `HATCHET_CLIENT_TLS_STRATEGY`. For `resend`, set `YAVER_RESEND_API_KEY`. Never
@@ -131,7 +136,8 @@ POST /v1/flows/simulate                                              # flow simu
 GET/POST /v1/campaigns | POST /v1/campaigns/{id}/recipients|schedule|start
 GET/POST /v1/chat/conversations | .../reply | .../status            # chat + takeover
 GET/POST /v1/channels                                               # WhatsApp/Messenger
-GET  /v1/billing | POST /v1/billing/topup                          # credits
+GET  /v1/billing | POST /v1/billing/topup | .../checkout           # credits + pay
+POST /webhooks/payment                                             # gateway IPN
 GET  /v1/analytics/overview | POST /v1/reports/ask                 # analytics
 GET  /v1/activity/stream                                            # live SSE feed
 POST /v1/events                                                     # merchant ingest

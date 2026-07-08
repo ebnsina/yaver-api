@@ -749,7 +749,10 @@ paths:
   /v1/billing/topup:
     post:
       operationId: topUpCredits
-      summary: Add credits to the org balance
+      summary: Add credits directly (dev-only mock — 403 in prod)
+      description: >
+        Instant credit grant with no payment, gated to non-prod for testing.
+        In production use /v1/billing/checkout instead.
       tags: [billing]
       security:
         - cookieAuth: []
@@ -767,7 +770,48 @@ paths:
           content:
             application/json:
               schema: { type: object, required: [balance], properties: { balance: { type: integer } } }
+        '403': { description: Not available outside dev }
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/billing/checkout:
+    post:
+      operationId: checkoutCredits
+      summary: Start a credit purchase and get the gateway redirect URL
+      description: >
+        Records a pending payment and opens a hosted checkout on the configured
+        gateway (SSLCommerz in prod, mock in dev). Credits are granted only when
+        the gateway confirms the charge via IPN at /webhooks/payment.
+      tags: [billing]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                credits: { type: integer }
+      responses:
+        '200':
+          description: Redirect the customer here to pay.
+          content:
+            application/json:
+              schema: { type: object, required: [redirect_url], properties: { redirect_url: { type: string } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '502': { description: Gateway could not start the payment }
+
+  /webhooks/payment:
+    post:
+      operationId: paymentIPN
+      summary: Payment gateway IPN callback (public, gateway-authenticated)
+      description: >
+        Instant Payment Notification from the gateway. The handler authenticates
+        the callback with the gateway (SSLCommerz validation API) before granting
+        credits, and always acks 200 so the gateway does not retry.
+      tags: [billing]
+      responses:
+        '200': { description: Acknowledged }
 
   /v1/analytics/summary:
     get:

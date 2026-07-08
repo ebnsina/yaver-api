@@ -12,6 +12,7 @@ import (
 type billingHandler struct {
 	log *slog.Logger
 	svc *billing.Service
+	dev bool // gates the mock top-up / dev-complete endpoints to non-prod
 }
 
 type ledgerEntryDTO struct {
@@ -41,7 +42,13 @@ func (h *billingHandler) get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"balance": bal, "ledger": out})
 }
 
+// topUp is the dev-only instant grant (no payment). In prod, clients must use
+// checkout → gateway → IPN instead.
 func (h *billingHandler) topUp(w http.ResponseWriter, r *http.Request) {
+	if !h.dev {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "use /v1/billing/checkout to pay"})
+		return
+	}
 	var body struct {
 		Amount int `json:"amount"`
 	}
@@ -56,4 +63,57 @@ func (h *billingHandler) topUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"balance": bal})
+}
+
+// checkout starts a real payment and returns the gateway redirect URL. Credits
+// land later, on the gateway's IPN confirmation.
+func (h *billingHandler) checkout(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Credits int `json:"credits"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	url, err := h.svc.Checkout(r.Context(), orgFromCtx(r), body.Credits)
+	if err != nil {
+		h.log.Error("checkout", "err", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "could not start payment"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"redirect_url": url})
+}
+
+// ipn is the public gateway callback (Instant Payment Notification). It always
+// acks with 200 so the gateway doesn't retry a callback we've already processed.
+func (h *billingHandler) ipn(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+		return
+	}
+	form := make(map[string]string, len(r.PostForm))
+	for k := range r.PostForm {
+		form[k] = r.PostForm.Get(k)
+	}
+	if err := h.svc.SettlePayment(r.Context(), form); err != nil {
+		h.log.Error("settle payment", "err", err)
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// devPay simulates the gateway + IPN in one click for the mock provider: it
+// settles the referenced payment as paid. Dev-only.
+func (h *billingHandler) devPay(w http.ResponseWriter, r *http.Request) {
+	if !h.dev {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dev only"})
+		return
+	}
+	ref := r.URL.Query().Get("ref")
+	if ref == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing ref"})
+		return
+	}
+	if err := h.svc.SettlePayment(r.Context(), map[string]string{"tran_id": ref, "status": "paid"}); err != nil {
+		h.log.Error("dev pay", "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "paid"})
 }

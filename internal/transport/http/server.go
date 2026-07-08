@@ -40,7 +40,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	ph := &publicHandler{log: log, keys: keysSvc, chat: chatSvc}
 	cnh := &channelsHandler{log: log, svc: msgSvc}
 	mwh := &metaWebhookHandler{log: log, svc: msgSvc}
-	bh := &billingHandler{log: log, svc: billingSvc}
+	bh := &billingHandler{log: log, svc: billingSvc, dev: dev}
 	anh := &analyticsHandler{log: log, svc: analyticsSvc}
 	rph := &reportsHandler{log: log, svc: reportsSvc}
 	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc}
@@ -73,6 +73,10 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	// Billing (credits).
 	mux.Handle("GET /v1/billing", ah.requireAuth(http.HandlerFunc(bh.get)))
 	mux.Handle("POST /v1/billing/topup", ah.requireAuth(http.HandlerFunc(bh.topUp)))
+	mux.Handle("POST /v1/billing/checkout", ah.requireAuth(http.HandlerFunc(bh.checkout)))
+	mux.Handle("GET /v1/dev/pay", ah.requireAuth(http.HandlerFunc(bh.devPay)))
+	// Public payment IPN (gateway-authenticated inside the handler).
+	mux.Handle("POST /webhooks/payment", http.HandlerFunc(bh.ipn))
 
 	// Customers + DND.
 	mux.Handle("GET /v1/customers", ah.requireAuth(http.HandlerFunc(cuh.list)))

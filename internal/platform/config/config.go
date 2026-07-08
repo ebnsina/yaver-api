@@ -26,6 +26,11 @@ type Config struct {
 	EmailSender    string // "log" | "resend" — transactional email delivery
 	EmailFrom      string // From address for transactional email
 	ResendAPIKey   string // required only when EmailSender == "resend"
+	PaymentGateway string // "mock" (dev) | "sslcommerz" — credit top-up gateway
+	AppURL         string // base URL for gateway redirect/IPN callbacks
+	SSLCzStoreID   string // required when PaymentGateway == "sslcommerz"
+	SSLCzStorePass string // required when PaymentGateway == "sslcommerz"
+	SSLCzSandbox   bool   // use the SSLCommerz sandbox host
 }
 
 func Load() (Config, error) {
@@ -52,6 +57,11 @@ func Load() (Config, error) {
 		EmailSender:    req("YAVER_EMAIL_SENDER"),
 		EmailFrom:      req("YAVER_EMAIL_FROM"),
 		ResendAPIKey:   os.Getenv("YAVER_RESEND_API_KEY"), // optional; required by the resend adapter
+		PaymentGateway: req("YAVER_PAYMENT_GATEWAY"),
+		AppURL:         req("YAVER_APP_URL"),
+		SSLCzStoreID:   os.Getenv("YAVER_SSLCOMMERZ_STORE_ID"),
+		SSLCzStorePass: os.Getenv("YAVER_SSLCOMMERZ_STORE_PASSWD"),
+		SSLCzSandbox:   os.Getenv("YAVER_SSLCOMMERZ_SANDBOX") == "true",
 	}
 
 	if len(missing) > 0 {
@@ -62,6 +72,9 @@ func Load() (Config, error) {
 	}
 	if cfg.ChatProvider == "anthropic" && cfg.AnthropicKey == "" {
 		return Config{}, fmt.Errorf("YAVER_ANTHROPIC_API_KEY is required when YAVER_CHAT_PROVIDER=anthropic")
+	}
+	if cfg.PaymentGateway == "sslcommerz" && (cfg.SSLCzStoreID == "" || cfg.SSLCzStorePass == "") {
+		return Config{}, fmt.Errorf("YAVER_SSLCOMMERZ_STORE_ID and YAVER_SSLCOMMERZ_STORE_PASSWD are required when YAVER_PAYMENT_GATEWAY=sslcommerz")
 	}
 	return cfg, nil
 }
