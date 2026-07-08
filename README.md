@@ -159,6 +159,22 @@ make migrate-up  # goose migrations (also: migrate-down, migrate-status)
 Conventions: thin transport, thin adapters, fat services, pure domain. Typed
 sentinel errors live in `domain` and map to HTTP status codes in one place.
 
+## Deployment
+
+The `Dockerfile` builds a static binary into a distroless image (the migration
+runner is included):
+
+```sh
+docker build -t yaver-api .
+# Apply migrations, then boot the API:
+docker run --rm --env-file .env --entrypoint /app/migrate yaver-api up
+docker run -p 8080:8080 --env-file .env yaver-api
+```
+
+Config is env-only (see the table above); supply it via the platform's secret
+store in production. In front of the app, a reverse proxy terminates TLS and
+routes the dashboard's `/v1`, `/public`, and `/widget.js` to this service.
+
 ## License
 
 Proprietary — © Yaver. All rights reserved.
