@@ -24,6 +24,8 @@ repo **[`yaver-web`](../yaver-web)**.
   for dev). Credits are granted only on a gateway-authenticated IPN, idempotently.
 - **Analytics & reports** — an overview endpoint plus a natural-language
   "ask" endpoint over the org's activity.
+- **Abuse throttling** — per-IP token-bucket rate limiting on the OTP, ingest,
+  and public-widget endpoints (in-process; swappable for a Redis limiter).
 - **Real-time activity feed** — an org-scoped Server-Sent Events stream
   (`/v1/activity/stream`) pushes calls and chat messages to the dashboard live,
   fed by an in-process pub/sub bus behind a swappable port.

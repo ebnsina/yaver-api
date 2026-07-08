@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ebnsina/yaver-api/internal/domain"
+	"github.com/ebnsina/yaver-api/internal/platform/ratelimit"
 	"github.com/ebnsina/yaver-api/internal/service/analytics"
 	"github.com/ebnsina/yaver-api/internal/service/apikeys"
 	"github.com/ebnsina/yaver-api/internal/service/auth"
@@ -47,6 +48,12 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	wh := &webhookHandler{log: log, svc: webhooksSvc}
 	acth := &activityHandler{log: log, subs: activitySub}
 
+	// Per-IP throttles: strict on OTP (anti-bombing / brute force), moderate on
+	// the public/ingest surfaces. Server-to-server callbacks (Meta, payment IPN)
+	// are left unthrottled so a provider retry storm isn't dropped.
+	authLimit := ratelimit.New(10, 5)     // ~10/min, burst 5
+	publicLimit := ratelimit.New(120, 40) // ~120/min, burst 40
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -57,8 +64,8 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	})
 
 	// Auth (phone-OTP + cookie sessions).
-	mux.HandleFunc("POST /v1/auth/otp/request", ah.requestOTP)
-	mux.HandleFunc("POST /v1/auth/otp/verify", ah.verifyOTP)
+	mux.Handle("POST /v1/auth/otp/request", authLimit.Middleware(http.HandlerFunc(ah.requestOTP)))
+	mux.Handle("POST /v1/auth/otp/verify", authLimit.Middleware(http.HandlerFunc(ah.verifyOTP)))
 	mux.HandleFunc("POST /v1/auth/logout", ah.logout)
 	mux.Handle("GET /v1/me", ah.requireAuth(http.HandlerFunc(ah.me)))
 	mux.Handle("GET /v1/calls", ah.requireAuth(http.HandlerFunc(ch.listCalls)))
@@ -112,7 +119,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("PUT /v1/flows/{id}", ah.requireAuth(http.HandlerFunc(fh.update)))
 
 	// Merchant ingest (X-API-Key resolves the org).
-	mux.Handle("POST /v1/events", ih.requireAPIKey(http.HandlerFunc(ih.postEvent)))
+	mux.Handle("POST /v1/events", publicLimit.Middleware(ih.requireAPIKey(http.HandlerFunc(ih.postEvent))))
 
 	// Authenticated actions on the caller's org (org resolved from the session).
 	mux.Handle("PUT /v1/settings/org", ah.requireAuth(http.HandlerFunc(ah.renameOrg)))
@@ -130,7 +137,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("POST /webhooks/meta", http.HandlerFunc(mwh.receive))
 
 	// Public widget surface (cross-origin, publishable-key auth).
-	mux.Handle("/public/chat/messages", cors(http.HandlerFunc(ph.chatSend)))
+	mux.Handle("/public/chat/messages", publicLimit.Middleware(cors(http.HandlerFunc(ph.chatSend))))
 	mux.Handle("/public/chat/config", cors(http.HandlerFunc(ph.chatConfig)))
 	mux.Handle("GET /widget.js", cors(http.HandlerFunc(ph.widget)))
 	mux.Handle("GET /v1/settings/webhook", ah.requireAuth(http.HandlerFunc(wh.getEndpoint)))
