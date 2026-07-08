@@ -3,9 +3,12 @@ INSERT INTO calls (id, org_id, flow_id, provider_call_id, direction, status, res
 VALUES ($1, $2, $3, $4, $5, $6, $7);
 
 -- name: GetCall :one
-SELECT id, org_id, flow_id, provider_call_id, direction, status, result, created_at
+SELECT id, org_id, flow_id, provider_call_id, direction, status, result, recording_url, transcript, created_at
 FROM calls
 WHERE id = $1;
+
+-- name: AttachCallMedia :exec
+UPDATE calls SET recording_url = $2, transcript = $3 WHERE id = $1;
 
 -- name: CallSummary :one
 SELECT
@@ -17,8 +20,11 @@ FROM calls
 WHERE org_id = $1;
 
 -- name: ListCallsByOrg :many
-SELECT id, org_id, flow_id, provider_call_id, direction, status, result, created_at
+SELECT id, org_id, flow_id, provider_call_id, direction, status, result, recording_url, transcript, created_at
 FROM calls
 WHERE org_id = $1
 ORDER BY created_at DESC
 LIMIT $2;
+
+-- name: DeleteCallsBefore :execrows
+DELETE FROM calls WHERE created_at < $1;

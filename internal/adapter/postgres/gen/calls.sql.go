@@ -7,7 +7,23 @@ package gen
 
 import (
 	"context"
+	"time"
 )
+
+const attachCallMedia = `-- name: AttachCallMedia :exec
+UPDATE calls SET recording_url = $2, transcript = $3 WHERE id = $1
+`
+
+type AttachCallMediaParams struct {
+	ID           string
+	RecordingUrl *string
+	Transcript   *string
+}
+
+func (q *Queries) AttachCallMedia(ctx context.Context, arg AttachCallMediaParams) error {
+	_, err := q.db.Exec(ctx, attachCallMedia, arg.ID, arg.RecordingUrl, arg.Transcript)
+	return err
+}
 
 const callSummary = `-- name: CallSummary :one
 SELECT
@@ -66,15 +82,40 @@ func (q *Queries) CreateCall(ctx context.Context, arg CreateCallParams) error {
 	return err
 }
 
+const deleteCallsBefore = `-- name: DeleteCallsBefore :execrows
+DELETE FROM calls WHERE created_at < $1
+`
+
+func (q *Queries) DeleteCallsBefore(ctx context.Context, createdAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCallsBefore, createdAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getCall = `-- name: GetCall :one
-SELECT id, org_id, flow_id, provider_call_id, direction, status, result, created_at
+SELECT id, org_id, flow_id, provider_call_id, direction, status, result, recording_url, transcript, created_at
 FROM calls
 WHERE id = $1
 `
 
-func (q *Queries) GetCall(ctx context.Context, id string) (Call, error) {
+type GetCallRow struct {
+	ID             string
+	OrgID          string
+	FlowID         *string
+	ProviderCallID *string
+	Direction      string
+	Status         string
+	Result         *string
+	RecordingUrl   *string
+	Transcript     *string
+	CreatedAt      time.Time
+}
+
+func (q *Queries) GetCall(ctx context.Context, id string) (GetCallRow, error) {
 	row := q.db.QueryRow(ctx, getCall, id)
-	var i Call
+	var i GetCallRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrgID,
@@ -83,13 +124,15 @@ func (q *Queries) GetCall(ctx context.Context, id string) (Call, error) {
 		&i.Direction,
 		&i.Status,
 		&i.Result,
+		&i.RecordingUrl,
+		&i.Transcript,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const listCallsByOrg = `-- name: ListCallsByOrg :many
-SELECT id, org_id, flow_id, provider_call_id, direction, status, result, created_at
+SELECT id, org_id, flow_id, provider_call_id, direction, status, result, recording_url, transcript, created_at
 FROM calls
 WHERE org_id = $1
 ORDER BY created_at DESC
@@ -101,15 +144,28 @@ type ListCallsByOrgParams struct {
 	Limit int32
 }
 
-func (q *Queries) ListCallsByOrg(ctx context.Context, arg ListCallsByOrgParams) ([]Call, error) {
+type ListCallsByOrgRow struct {
+	ID             string
+	OrgID          string
+	FlowID         *string
+	ProviderCallID *string
+	Direction      string
+	Status         string
+	Result         *string
+	RecordingUrl   *string
+	Transcript     *string
+	CreatedAt      time.Time
+}
+
+func (q *Queries) ListCallsByOrg(ctx context.Context, arg ListCallsByOrgParams) ([]ListCallsByOrgRow, error) {
 	rows, err := q.db.Query(ctx, listCallsByOrg, arg.OrgID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Call
+	var items []ListCallsByOrgRow
 	for rows.Next() {
-		var i Call
+		var i ListCallsByOrgRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrgID,
@@ -118,6 +174,8 @@ func (q *Queries) ListCallsByOrg(ctx context.Context, arg ListCallsByOrgParams) 
 			&i.Direction,
 			&i.Status,
 			&i.Result,
+			&i.RecordingUrl,
+			&i.Transcript,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

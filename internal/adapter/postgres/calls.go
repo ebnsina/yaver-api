@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -45,6 +46,8 @@ func (r *CallRepo) Get(ctx context.Context, id domain.CallID) (*domain.Call, err
 		Direction:      domain.Direction(row.Direction),
 		Status:         domain.CallStatus(row.Status),
 		Result:         deref(row.Result),
+		RecordingURL:   deref(row.RecordingUrl),
+		Transcript:     deref(row.Transcript),
 		CreatedAt:      row.CreatedAt,
 	}, nil
 }
@@ -68,6 +71,18 @@ func (r *CallRepo) ListByOrg(ctx context.Context, orgID domain.OrgID, limit int)
 		})
 	}
 	return out, nil
+}
+
+func (r *CallRepo) AttachMedia(ctx context.Context, id domain.CallID, recordingURL, transcript string) error {
+	return r.q.AttachCallMedia(ctx, gen.AttachCallMediaParams{
+		ID:           string(id),
+		RecordingUrl: strPtr(recordingURL),
+		Transcript:   strPtr(transcript),
+	})
+}
+
+func (r *CallRepo) DeleteBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	return r.q.DeleteCallsBefore(ctx, cutoff)
 }
 
 func (r *CallRepo) Summary(ctx context.Context, orgID domain.OrgID) (domain.CallSummary, error) {

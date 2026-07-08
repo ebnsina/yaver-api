@@ -99,6 +99,8 @@ type Call struct {
 	Direction      Direction
 	Status         CallStatus
 	Result         string
+	RecordingURL   string // set once the media pipeline records the call
+	Transcript     string // set once the recording is transcribed (STT)
 	CreatedAt      time.Time
 }
 

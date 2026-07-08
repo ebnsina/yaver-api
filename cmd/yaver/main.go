@@ -28,6 +28,8 @@ import (
 	reporterbuiltin "github.com/ebnsina/yaver-api/internal/adapter/reporter/builtin"
 	smslog "github.com/ebnsina/yaver-api/internal/adapter/sms/logsender"
 	smstwilio "github.com/ebnsina/yaver-api/internal/adapter/sms/twilio"
+	sttnoop "github.com/ebnsina/yaver-api/internal/adapter/stt/noop"
+	sttwhisper "github.com/ebnsina/yaver-api/internal/adapter/stt/whisper"
 	voicelivekit "github.com/ebnsina/yaver-api/internal/adapter/voice/livekit"
 	voicemock "github.com/ebnsina/yaver-api/internal/adapter/voice/mock"
 	"github.com/ebnsina/yaver-api/internal/domain"
@@ -52,6 +54,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/notify"
 	"github.com/ebnsina/yaver-api/internal/service/onboarding"
 	"github.com/ebnsina/yaver-api/internal/service/reports"
+	"github.com/ebnsina/yaver-api/internal/service/transcription"
 	"github.com/ebnsina/yaver-api/internal/service/webhooks"
 	httptransport "github.com/ebnsina/yaver-api/internal/transport/http"
 	"github.com/ebnsina/yaver-api/pkg/crypto"
@@ -137,6 +140,20 @@ func main() {
 
 	callsSvc := calls.New(voice, postgres.NewOutcomeRepo(pool), callRepo, flowRepo, creditRepo, callPolicyRepo, notifySvc, clock.Real{}, activityBus)
 
+	// Call transcription — noop (dev) or a Whisper-compatible STT. Consumed by
+	// the transcribe endpoint (and the voice media pipeline once it records).
+	var stt domain.STT
+	switch cfg.STTProvider {
+	case "noop":
+		stt = sttnoop.New()
+	case "whisper":
+		stt = sttwhisper.New(cfg.WhisperURL, cfg.WhisperKey, cfg.WhisperModel)
+	default:
+		log.Error("unsupported YAVER_STT_PROVIDER (want 'noop' or 'whisper')", "value", cfg.STTProvider)
+		os.Exit(1)
+	}
+	transcriptionSvc := transcription.New(stt, callRepo)
+
 	// Payment gateway for credit top-ups — "mock" (dev, no real money) or the
 	// SSLCommerz aggregator (cards + bKash/Nagad/Rocket behind one checkout).
 	var gateway domain.PaymentGateway
@@ -215,7 +232,7 @@ func main() {
 	webhooksSvc := webhooks.New(postgres.NewWebhookRepo(pool), cipher, log)
 	go webhooksSvc.Run(context.Background())
 
-	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, billingSvc, analyticsSvc, reportsSvc, keysSvc, ingestSvc, webhooksSvc, orch, activityBus, onboardingSvc, cfg.WebURL)
+	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, billingSvc, analyticsSvc, reportsSvc, keysSvc, ingestSvc, webhooksSvc, orch, activityBus, onboardingSvc, transcriptionSvc, cfg.WebURL)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           otelhttp.NewHandler(handler, "http"),
@@ -224,6 +241,27 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Call retention: prune calls older than the configured window on a timer.
+	if cfg.CallRetentionDays > 0 {
+		go func() {
+			ticker := time.NewTicker(6 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					cutoff := time.Now().AddDate(0, 0, -cfg.CallRetentionDays)
+					if n, err := callRepo.DeleteBefore(context.Background(), cutoff); err != nil {
+						log.Error("call retention sweep", "err", err)
+					} else if n > 0 {
+						log.Info("call retention: pruned old calls", "count", n)
+					}
+				}
+			}
+		}()
+	}
 
 	// Campaign scheduler: start due scheduled campaigns on a timer.
 	go func() {

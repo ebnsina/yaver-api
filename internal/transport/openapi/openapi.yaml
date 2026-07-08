@@ -916,6 +916,31 @@ paths:
                 type: string
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/calls/{id}/transcribe:
+    post:
+      operationId: transcribeCall
+      summary: Transcribe a call recording and store the transcript
+      tags: [calls]
+      security:
+        - cookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recording_url]
+              properties:
+                recording_url: { type: string }
+                locale: { type: string }
+      responses:
+        '200': { description: Transcribed and stored }
+        '400': { description: recording_url required }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Call not found }
+
   /v1/onboarding/ask:
     post:
       operationId: onboardingAsk

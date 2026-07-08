@@ -110,7 +110,7 @@ WHERE s.token_hash = $1 AND s.expires_at > now()
 type SessionWithUserRow struct {
 	UserID    uuid.UUID
 	ExpiresAt time.Time
-	Phone     string
+	Phone     *string
 	Email     *string
 	Name      *string
 }
@@ -131,10 +131,10 @@ func (q *Queries) SessionWithUser(ctx context.Context, tokenHash []byte) (Sessio
 const upsertUserByPhone = `-- name: UpsertUserByPhone :one
 INSERT INTO users (phone) VALUES ($1)
 ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone
-RETURNING id, phone, email, name, created_at
+RETURNING id, phone, email, name, created_at, password_hash
 `
 
-func (q *Queries) UpsertUserByPhone(ctx context.Context, phone string) (User, error) {
+func (q *Queries) UpsertUserByPhone(ctx context.Context, phone *string) (User, error) {
 	row := q.db.QueryRow(ctx, upsertUserByPhone, phone)
 	var i User
 	err := row.Scan(
@@ -143,6 +143,7 @@ func (q *Queries) UpsertUserByPhone(ctx context.Context, phone string) (User, er
 		&i.Email,
 		&i.Name,
 		&i.CreatedAt,
+		&i.PasswordHash,
 	)
 	return i, err
 }

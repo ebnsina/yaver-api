@@ -31,6 +31,8 @@ type Call struct {
 	Status         string
 	Result         *string
 	CreatedAt      time.Time
+	RecordingUrl   *string
+	Transcript     *string
 }
 
 type Campaign struct {
@@ -172,6 +174,18 @@ type OtpCode struct {
 	CreatedAt  time.Time
 }
 
+type Payment struct {
+	ID          string
+	OrgID       string
+	Provider    string
+	ProviderRef string
+	Credits     int32
+	AmountBdt   int32
+	Status      string
+	CreatedAt   time.Time
+	SettledAt   *time.Time
+}
+
 type Session struct {
 	ID        uuid.UUID
 	TokenHash []byte
@@ -181,11 +195,12 @@ type Session struct {
 }
 
 type User struct {
-	ID        uuid.UUID
-	Phone     string
-	Email     *string
-	Name      *string
-	CreatedAt time.Time
+	ID           uuid.UUID
+	Phone        *string
+	Email        *string
+	Name         *string
+	CreatedAt    time.Time
+	PasswordHash []byte
 }
 
 type WebhookDelivery struct {

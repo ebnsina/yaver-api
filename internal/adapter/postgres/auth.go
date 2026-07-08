@@ -65,11 +65,11 @@ func (r *AuthRepo) UserByEmail(ctx context.Context, email string) (domain.User, 
 }
 
 func (r *AuthRepo) UpsertUserByPhone(ctx context.Context, phone string) (domain.User, error) {
-	u, err := r.q.UpsertUserByPhone(ctx, phone)
+	u, err := r.q.UpsertUserByPhone(ctx, &phone) // phone column is now nullable
 	if err != nil {
 		return domain.User{}, err
 	}
-	return domain.User{ID: u.ID.String(), Phone: u.Phone, Email: deref(u.Email), Name: deref(u.Name)}, nil
+	return domain.User{ID: u.ID.String(), Phone: deref(u.Phone), Email: deref(u.Email), Name: deref(u.Name)}, nil
 }
 
 func (r *AuthRepo) InsertOTP(ctx context.Context, phone string, codeHash []byte, expiresAt time.Time) error {

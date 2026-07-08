@@ -24,6 +24,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/messaging"
 	"github.com/ebnsina/yaver-api/internal/service/onboarding"
 	"github.com/ebnsina/yaver-api/internal/service/reports"
+	"github.com/ebnsina/yaver-api/internal/service/transcription"
 	"github.com/ebnsina/yaver-api/internal/service/webhooks"
 	"github.com/ebnsina/yaver-api/internal/transport/openapi"
 	"github.com/ebnsina/yaver-api/pkg/phone"
@@ -31,10 +32,10 @@ import (
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
 // arrive with rate-limit in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service, reportsSvc *reports.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator, activitySub domain.ActivitySubscriber, onboardingSvc *onboarding.Service, webURL string) http.Handler {
+func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service, reportsSvc *reports.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator, activitySub domain.ActivitySubscriber, onboardingSvc *onboarding.Service, transcribeSvc *transcription.Service, webURL string) http.Handler {
 	dev := env == "dev"
 	ah := &authHandler{log: log, svc: authSvc, orgs: orgStore, secure: !dev}
-	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
+	ch := &callsHandler{log: log, svc: callsSvc, orch: orch, transcribe: transcribeSvc}
 	fh := &flowsHandler{log: log, svc: flowsSvc}
 	cuh := &customersHandler{log: log, svc: custSvc}
 	cah := &campaignsHandler{log: log, svc: campSvc}
@@ -74,6 +75,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("GET /v1/me", ah.requireAuth(http.HandlerFunc(ah.me)))
 	mux.Handle("GET /v1/calls", ah.requireAuth(http.HandlerFunc(ch.listCalls)))
 	mux.Handle("GET /v1/calls/{id}", ah.requireAuth(http.HandlerFunc(ch.getCall)))
+	mux.Handle("POST /v1/calls/{id}/transcribe", ah.requireAuth(http.HandlerFunc(ch.transcribeCall)))
 	mux.Handle("GET /v1/settings/call-policy", ah.requireAuth(http.HandlerFunc(ch.getPolicy)))
 	mux.Handle("PUT /v1/settings/call-policy", ah.requireAuth(http.HandlerFunc(ch.savePolicy)))
 	mux.Handle("GET /v1/analytics/summary", ah.requireAuth(http.HandlerFunc(ch.summary)))
@@ -154,9 +156,10 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 }
 
 type callsHandler struct {
-	log  *slog.Logger
-	svc  *calls.Service
-	orch domain.Orchestrator
+	log        *slog.Logger
+	svc        *calls.Service
+	orch       domain.Orchestrator
+	transcribe *transcription.Service
 }
 
 type testCallRequest struct {
@@ -234,6 +237,8 @@ type callDetailDTO struct {
 	Result         string `json:"result"`
 	FlowID         string `json:"flow_id"`
 	ProviderCallID string `json:"provider_call_id"`
+	RecordingURL   string `json:"recording_url,omitempty"`
+	Transcript     string `json:"transcript,omitempty"`
 	CreatedAt      string `json:"created_at"`
 }
 
@@ -256,8 +261,36 @@ func (h *callsHandler) getCall(w http.ResponseWriter, r *http.Request) {
 		Result:         c.Result,
 		FlowID:         string(c.FlowID),
 		ProviderCallID: string(c.ProviderCallID),
+		RecordingURL:   c.RecordingURL,
+		Transcript:     c.Transcript,
 		CreatedAt:      c.CreatedAt.Format(time.RFC3339),
 	})
+}
+
+type transcribeRequest struct {
+	RecordingURL string `json:"recording_url"`
+	Locale       string `json:"locale"`
+}
+
+// transcribeCall downloads a call recording, transcribes it, and stores the
+// transcript on the (org-scoped) call.
+func (h *callsHandler) transcribeCall(w http.ResponseWriter, r *http.Request) {
+	id := domain.CallID(r.PathValue("id"))
+	if _, err := h.svc.Get(r.Context(), orgFromCtx(r), id); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	var req transcribeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RecordingURL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "recording_url required"})
+		return
+	}
+	if err := h.transcribe.Transcribe(r.Context(), id, req.RecordingURL, req.Locale); err != nil {
+		h.log.Error("transcribe", "err", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "transcription failed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // summary returns dashboard metrics for the org.

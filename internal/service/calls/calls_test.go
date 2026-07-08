@@ -110,6 +110,8 @@ func (fakeCalls) ListByOrg(context.Context, domain.OrgID, int) ([]domain.Call, e
 func (fakeCalls) Summary(context.Context, domain.OrgID) (domain.CallSummary, error) {
 	return domain.CallSummary{}, nil
 }
+func (fakeCalls) AttachMedia(context.Context, domain.CallID, string, string) error { return nil }
+func (fakeCalls) DeleteBefore(context.Context, time.Time) (int64, error)           { return 0, nil }
 
 type fakePolicy struct{}
 

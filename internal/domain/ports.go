@@ -46,6 +46,11 @@ type CallRepo interface {
 	Get(ctx context.Context, id CallID) (*Call, error)
 	ListByOrg(ctx context.Context, orgID OrgID, limit int) ([]Call, error)
 	Summary(ctx context.Context, orgID OrgID) (CallSummary, error)
+	// AttachMedia stores the recording URL and transcript for a completed call.
+	AttachMedia(ctx context.Context, id CallID, recordingURL, transcript string) error
+	// DeleteBefore prunes calls older than the cutoff (retention). Returns the
+	// number removed.
+	DeleteBefore(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
 // Org is a merchant account.
