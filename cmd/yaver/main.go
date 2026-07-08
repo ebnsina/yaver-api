@@ -47,6 +47,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
 	"github.com/ebnsina/yaver-api/internal/service/messaging"
 	"github.com/ebnsina/yaver-api/internal/service/notify"
+	"github.com/ebnsina/yaver-api/internal/service/onboarding"
 	"github.com/ebnsina/yaver-api/internal/service/reports"
 	"github.com/ebnsina/yaver-api/internal/service/webhooks"
 	httptransport "github.com/ebnsina/yaver-api/internal/transport/http"
@@ -185,6 +186,7 @@ func main() {
 		os.Exit(1)
 	}
 	chatSvc := chat.New(postgres.NewChatRepo(pool), postgres.NewChatSettingsRepo(pool), chatModel, chatbuiltin.NewSummarizer(), postgres.NewInsightRepo(pool), activityBus)
+	onboardingSvc := onboarding.New(chatModel)
 
 	// Messaging channels — pluggable sender behind domain.MessagingSender.
 	var msgSender domain.MessagingSender
@@ -203,7 +205,7 @@ func main() {
 	webhooksSvc := webhooks.New(postgres.NewWebhookRepo(pool), cipher, log)
 	go webhooksSvc.Run(context.Background())
 
-	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, billingSvc, analyticsSvc, reportsSvc, keysSvc, ingestSvc, webhooksSvc, orch, activityBus, cfg.WebURL)
+	handler := httptransport.New(log, cfg.Env, authSvc, orgProv, callsSvc, flowsSvc, custSvc, campSvc, chatSvc, msgSvc, billingSvc, analyticsSvc, reportsSvc, keysSvc, ingestSvc, webhooksSvc, orch, activityBus, onboardingSvc, cfg.WebURL)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,

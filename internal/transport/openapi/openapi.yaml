@@ -868,6 +868,41 @@ paths:
                 type: string
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/onboarding/ask:
+    post:
+      operationId: onboardingAsk
+      summary: Ask the AI setup assistant a question
+      description: >
+        Runs the configured chat model with a setup-aware system prompt. The
+        client sends its known setup progress so the answer references what's
+        left to do.
+      tags: [analytics]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: { type: string }
+                progress:
+                  type: object
+                  properties:
+                    store_named: { type: boolean }
+                    has_api_key: { type: boolean }
+                    webhook_set: { type: boolean }
+                    has_flow: { type: boolean }
+      responses:
+        '200':
+          description: Assistant answer
+          content:
+            application/json:
+              schema: { type: object, required: [answer], properties: { answer: { type: string } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/reports/ask:
     post:
       operationId: askReport

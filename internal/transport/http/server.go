@@ -22,6 +22,7 @@ import (
 	"github.com/ebnsina/yaver-api/internal/service/flows"
 	"github.com/ebnsina/yaver-api/internal/service/ingest"
 	"github.com/ebnsina/yaver-api/internal/service/messaging"
+	"github.com/ebnsina/yaver-api/internal/service/onboarding"
 	"github.com/ebnsina/yaver-api/internal/service/reports"
 	"github.com/ebnsina/yaver-api/internal/service/webhooks"
 	"github.com/ebnsina/yaver-api/internal/transport/openapi"
@@ -30,7 +31,7 @@ import (
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
 // arrive with rate-limit in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service, reportsSvc *reports.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator, activitySub domain.ActivitySubscriber, webURL string) http.Handler {
+func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service, reportsSvc *reports.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator, activitySub domain.ActivitySubscriber, onboardingSvc *onboarding.Service, webURL string) http.Handler {
 	dev := env == "dev"
 	ah := &authHandler{log: log, svc: authSvc, orgs: orgStore, secure: !dev}
 	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
@@ -47,6 +48,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc}
 	wh := &webhookHandler{log: log, svc: webhooksSvc}
 	acth := &activityHandler{log: log, subs: activitySub}
+	obh := &onboardingHandler{log: log, svc: onboardingSvc}
 
 	// Per-IP throttles: strict on OTP (anti-bombing / brute force), moderate on
 	// the public/ingest surfaces. Server-to-server callbacks (Meta, payment IPN)
@@ -76,6 +78,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("GET /v1/analytics/overview", ah.requireAuth(http.HandlerFunc(anh.overview)))
 	mux.Handle("GET /v1/activity/stream", ah.requireAuth(http.HandlerFunc(acth.stream)))
 	mux.Handle("POST /v1/reports/ask", ah.requireAuth(http.HandlerFunc(rph.ask)))
+	mux.Handle("POST /v1/onboarding/ask", ah.requireAuth(http.HandlerFunc(obh.ask)))
 
 	// Billing (credits).
 	mux.Handle("GET /v1/billing", ah.requireAuth(http.HandlerFunc(bh.get)))
