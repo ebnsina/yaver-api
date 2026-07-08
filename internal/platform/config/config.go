@@ -27,7 +27,8 @@ type Config struct {
 	EmailFrom      string // From address for transactional email
 	ResendAPIKey   string // required only when EmailSender == "resend"
 	PaymentGateway string // "mock" (dev) | "sslcommerz" — credit top-up gateway
-	AppURL         string // base URL for gateway redirect/IPN callbacks
+	AppURL         string // API base URL for gateway redirect/IPN callbacks
+	WebURL         string // dashboard base URL to send the customer back to after paying
 	SSLCzStoreID   string // required when PaymentGateway == "sslcommerz"
 	SSLCzStorePass string // required when PaymentGateway == "sslcommerz"
 	SSLCzSandbox   bool   // use the SSLCommerz sandbox host
@@ -59,6 +60,7 @@ func Load() (Config, error) {
 		ResendAPIKey:   os.Getenv("YAVER_RESEND_API_KEY"), // optional; required by the resend adapter
 		PaymentGateway: req("YAVER_PAYMENT_GATEWAY"),
 		AppURL:         req("YAVER_APP_URL"),
+		WebURL:         req("YAVER_WEB_URL"),
 		SSLCzStoreID:   os.Getenv("YAVER_SSLCOMMERZ_STORE_ID"),
 		SSLCzStorePass: os.Getenv("YAVER_SSLCOMMERZ_STORE_PASSWD"),
 		SSLCzSandbox:   os.Getenv("YAVER_SSLCOMMERZ_SANDBOX") == "true",

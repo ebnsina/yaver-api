@@ -10,9 +10,10 @@ import (
 )
 
 type billingHandler struct {
-	log *slog.Logger
-	svc *billing.Service
-	dev bool // gates the mock top-up / dev-complete endpoints to non-prod
+	log    *slog.Logger
+	svc    *billing.Service
+	dev    bool   // gates the mock top-up / dev-complete endpoints to non-prod
+	webURL string // dashboard base URL to bounce the customer back to after paying
 }
 
 type ledgerEntryDTO struct {
@@ -115,5 +116,20 @@ func (h *billingHandler) devPay(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "paid"})
+	http.Redirect(w, r, h.webURL+"/settings?payment=paid", http.StatusSeeOther)
+}
+
+// paymentReturn is the browser landing after a hosted checkout (gateways redirect
+// the customer here, sometimes via POST). It only bounces the browser back to the
+// dashboard — the authoritative credit grant happens on the separate IPN. Status
+// is best-effort from the callback for UI messaging only.
+func (h *billingHandler) paymentReturn(w http.ResponseWriter, r *http.Request) {
+	status := "failed"
+	_ = r.ParseForm()
+	switch r.FormValue("status") {
+	case "VALID", "VALIDATED", "paid", "":
+		// empty covers the success_url with no status field; the IPN is the source of truth
+		status = "paid"
+	}
+	http.Redirect(w, r, h.webURL+"/settings?payment="+status, http.StatusSeeOther)
 }

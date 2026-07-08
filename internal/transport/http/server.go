@@ -29,7 +29,7 @@ import (
 
 // New wires the router. (Phase 0 uses net/http ServeMux; chi + richer middleware
 // arrive with rate-limit in Phase 1.)
-func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service, reportsSvc *reports.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator, activitySub domain.ActivitySubscriber) http.Handler {
+func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.OrgStore, callsSvc *calls.Service, flowsSvc *flows.Service, custSvc *customers.Service, campSvc *campaigns.Service, chatSvc *chat.Service, msgSvc *messaging.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service, reportsSvc *reports.Service, keysSvc *apikeys.Service, ingestSvc *ingest.Service, webhooksSvc *webhooks.Service, orch domain.Orchestrator, activitySub domain.ActivitySubscriber, webURL string) http.Handler {
 	dev := env == "dev"
 	ah := &authHandler{log: log, svc: authSvc, orgs: orgStore, secure: !dev}
 	ch := &callsHandler{log: log, svc: callsSvc, orch: orch}
@@ -40,7 +40,7 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	ph := &publicHandler{log: log, keys: keysSvc, chat: chatSvc}
 	cnh := &channelsHandler{log: log, svc: msgSvc}
 	mwh := &metaWebhookHandler{log: log, svc: msgSvc}
-	bh := &billingHandler{log: log, svc: billingSvc, dev: dev}
+	bh := &billingHandler{log: log, svc: billingSvc, dev: dev, webURL: webURL}
 	anh := &analyticsHandler{log: log, svc: analyticsSvc}
 	rph := &reportsHandler{log: log, svc: reportsSvc}
 	ih := &ingestHandler{log: log, keys: keysSvc, ingest: ingestSvc}
@@ -77,6 +77,9 @@ func New(log *slog.Logger, env string, authSvc *auth.Service, orgStore domain.Or
 	mux.Handle("GET /v1/dev/pay", ah.requireAuth(http.HandlerFunc(bh.devPay)))
 	// Public payment IPN (gateway-authenticated inside the handler).
 	mux.Handle("POST /webhooks/payment", http.HandlerFunc(bh.ipn))
+	// Browser landing after checkout — bounces back to the dashboard (GET or POST).
+	mux.Handle("GET /billing/return", http.HandlerFunc(bh.paymentReturn))
+	mux.Handle("POST /billing/return", http.HandlerFunc(bh.paymentReturn))
 
 	// Customers + DND.
 	mux.Handle("GET /v1/customers", ah.requireAuth(http.HandlerFunc(cuh.list)))

@@ -107,7 +107,8 @@ defaults — the app fails to boot if a required var is missing. Copy
 | `YAVER_EMAIL_SENDER` | `log` (dev) or `resend` |
 | `YAVER_EMAIL_FROM` | From address for transactional email |
 | `YAVER_PAYMENT_GATEWAY` | `mock` (dev) or `sslcommerz` (cards + bKash/Nagad/Rocket) |
-| `YAVER_APP_URL` | Public base URL for gateway redirect/IPN callbacks |
+| `YAVER_APP_URL` | Public API base URL for gateway redirect/IPN callbacks |
+| `YAVER_WEB_URL` | Dashboard base URL to return the customer to after paying |
 | `YAVER_SSLCOMMERZ_STORE_ID` / `_STORE_PASSWD` / `_SANDBOX` | Required for the `sslcommerz` gateway |
 
 For `hatchet`, also set `HATCHET_CLIENT_TOKEN` and
