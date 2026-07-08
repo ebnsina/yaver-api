@@ -26,6 +26,8 @@ import (
 	"github.com/ebnsina/yaver-api/internal/adapter/payment/sslcommerz"
 	"github.com/ebnsina/yaver-api/internal/adapter/postgres"
 	reporterbuiltin "github.com/ebnsina/yaver-api/internal/adapter/reporter/builtin"
+	smslog "github.com/ebnsina/yaver-api/internal/adapter/sms/logsender"
+	smstwilio "github.com/ebnsina/yaver-api/internal/adapter/sms/twilio"
 	voicelivekit "github.com/ebnsina/yaver-api/internal/adapter/voice/livekit"
 	voicemock "github.com/ebnsina/yaver-api/internal/adapter/voice/mock"
 	"github.com/ebnsina/yaver-api/internal/domain"
@@ -76,7 +78,19 @@ func main() {
 	}
 
 	flowRepo := postgres.NewFlowRepo(pool)
-	authSvc := auth.New(postgres.NewAuthRepo(pool), clock.Real{}, cfg.AuthSecret, cfg.Env)
+
+	// OTP delivery: dev "log" sender (prints the code) or Twilio SMS.
+	var smsSender domain.SMSSender
+	switch cfg.SMSSender {
+	case "log":
+		smsSender = smslog.New(log)
+	case "twilio":
+		smsSender = smstwilio.New(cfg.TwilioSID, cfg.TwilioToken, cfg.TwilioFrom)
+	default:
+		log.Error("unsupported YAVER_SMS_SENDER (want 'log' or 'twilio')", "value", cfg.SMSSender)
+		os.Exit(1)
+	}
+	authSvc := auth.New(postgres.NewAuthRepo(pool), clock.Real{}, cfg.AuthSecret, cfg.Env, smsSender)
 	creditRepo := postgres.NewCreditRepo(pool)
 	callRepo := postgres.NewCallRepo(pool)
 	callPolicyRepo := postgres.NewCallPolicyRepo(pool)

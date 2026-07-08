@@ -27,6 +27,10 @@ type Config struct {
 	ChatProvider   string // "builtin" | "openai" | "anthropic" — provider-agnostic AI seam
 	AnthropicKey   string // required only when ChatProvider == "anthropic"
 	AnthropicModel string // optional; defaults to claude-opus-4-8 in the adapter
+	SMSSender      string // "log" (dev) | "twilio" — OTP delivery
+	TwilioSID      string // required when SMSSender == "twilio"
+	TwilioToken    string
+	TwilioFrom     string
 	MsgSender      string // "log" | "meta" — messaging (WhatsApp/Messenger) delivery
 	EmailSender    string // "log" | "resend" — transactional email delivery
 	EmailFrom      string // From address for transactional email
@@ -61,6 +65,10 @@ func Load() (Config, error) {
 		LiveKitKey:     os.Getenv("YAVER_LIVEKIT_API_KEY"),
 		LiveKitSecret:  os.Getenv("YAVER_LIVEKIT_API_SECRET"),
 		LiveKitTrunkID: os.Getenv("YAVER_LIVEKIT_SIP_TRUNK_ID"),
+		SMSSender:      req("YAVER_SMS_SENDER"),
+		TwilioSID:      os.Getenv("YAVER_TWILIO_ACCOUNT_SID"),
+		TwilioToken:    os.Getenv("YAVER_TWILIO_AUTH_TOKEN"),
+		TwilioFrom:     os.Getenv("YAVER_TWILIO_FROM"),
 		ChatProvider:   req("YAVER_CHAT_PROVIDER"),
 		AnthropicKey:   os.Getenv("YAVER_ANTHROPIC_API_KEY"), // optional; required by the anthropic adapter
 		AnthropicModel: os.Getenv("YAVER_ANTHROPIC_MODEL"),   // optional; adapter defaults to claude-opus-4-8
@@ -84,6 +92,9 @@ func Load() (Config, error) {
 	}
 	if cfg.ChatProvider == "anthropic" && cfg.AnthropicKey == "" {
 		return Config{}, fmt.Errorf("YAVER_ANTHROPIC_API_KEY is required when YAVER_CHAT_PROVIDER=anthropic")
+	}
+	if cfg.SMSSender == "twilio" && (cfg.TwilioSID == "" || cfg.TwilioToken == "" || cfg.TwilioFrom == "") {
+		return Config{}, fmt.Errorf("YAVER_TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM are required when YAVER_SMS_SENDER=twilio")
 	}
 	if cfg.VoiceProvider == "livekit" && (cfg.LiveKitURL == "" || cfg.LiveKitKey == "" || cfg.LiveKitSecret == "" || cfg.LiveKitTrunkID == "") {
 		return Config{}, fmt.Errorf("YAVER_LIVEKIT_URL/API_KEY/API_SECRET/SIP_TRUNK_ID are required when YAVER_VOICE_PROVIDER=livekit")

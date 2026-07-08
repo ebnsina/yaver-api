@@ -28,19 +28,23 @@ type Service struct {
 	repo    domain.AuthRepo
 	clock   domain.Clock
 	secret  []byte
-	devEcho bool // in dev, RequestOTP returns the code (no SMS provider yet)
+	sms     domain.SMSSender
+	devEcho bool // in dev, RequestOTP also returns the code for convenience
 }
 
-func New(repo domain.AuthRepo, clock domain.Clock, secret string, env string) *Service {
-	return &Service{repo: repo, clock: clock, secret: []byte(secret), devEcho: env == "dev"}
+func New(repo domain.AuthRepo, clock domain.Clock, secret, env string, sms domain.SMSSender) *Service {
+	return &Service{repo: repo, clock: clock, secret: []byte(secret), sms: sms, devEcho: env == "dev"}
 }
 
-// RequestOTP generates and stores a code for the phone. In dev it returns the
-// code (there's no SMS provider yet); in prod it returns "" and would enqueue
-// an SMS send.
+// RequestOTP generates and stores a code for the phone and texts it via the SMS
+// sender. In dev it also returns the code for convenience (the dev SMS sender
+// only logs it).
 func (s *Service) RequestOTP(ctx context.Context, phone string) (devCode string, err error) {
 	code := randomCode()
 	if err := s.repo.InsertOTP(ctx, phone, s.hashCode(code), s.clock.Now().Add(otpTTL)); err != nil {
+		return "", err
+	}
+	if err := s.sms.Send(ctx, phone, "Your Yaver verification code is "+code); err != nil {
 		return "", err
 	}
 	if s.devEcho {

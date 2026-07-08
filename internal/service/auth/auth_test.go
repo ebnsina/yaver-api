@@ -93,13 +93,21 @@ type fixedClock struct{ t time.Time }
 
 func (c fixedClock) Now() time.Time { return c.t }
 
+type fakeSMS struct{ sent int }
+
+func (f *fakeSMS) Send(context.Context, string, string) error { f.sent++; return nil }
+
 func TestOTPLoginFlow(t *testing.T) {
 	repo := newFakeRepo()
-	svc := New(repo, fixedClock{time.Unix(1_700_000_000, 0)}, "test-secret", "dev")
+	sms := &fakeSMS{}
+	svc := New(repo, fixedClock{time.Unix(1_700_000_000, 0)}, "test-secret", "dev", sms)
 	ctx := context.Background()
 	const phone = "+8801712345678"
 
 	code, err := svc.RequestOTP(ctx, phone)
+	if sms.sent != 1 {
+		t.Fatalf("RequestOTP should send exactly one SMS, sent %d", sms.sent)
+	}
 	if err != nil || code == "" {
 		t.Fatalf("request otp: code=%q err=%v", code, err)
 	}

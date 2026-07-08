@@ -41,7 +41,9 @@ func (f *fakeFlows) ListByOrg(context.Context, domain.OrgID) ([]domain.FlowSumma
 func (f *fakeFlows) GetByID(context.Context, domain.FlowID) (domain.FlowDetail, bool, error) {
 	return domain.FlowDetail{}, false, nil
 }
-func (f *fakeFlows) UpdateSpec(context.Context, domain.FlowID, domain.OrgID, []byte) error { return nil }
+func (f *fakeFlows) UpdateSpec(context.Context, domain.FlowID, domain.OrgID, []byte) error {
+	return nil
+}
 
 type fakeOrch struct {
 	calls []domain.PlaceCallInput
