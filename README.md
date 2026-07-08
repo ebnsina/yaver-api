@@ -98,7 +98,9 @@ defaults — the app fails to boot if a required var is missing. Copy
 | `YAVER_AUTH_SECRET` | HMAC key for hashing OTP codes at rest |
 | `YAVER_ENCRYPTION_KEY` | AES-256-GCM master key (base64 of 32 bytes) for secrets at rest — `openssl rand -base64 32` |
 | `YAVER_ORCHESTRATOR` | `local` (in-process, no deps) or `hatchet` |
-| `YAVER_CHAT_PROVIDER` | `builtin` (rule-based) — `openai`/`anthropic` slot in behind the same port |
+| `YAVER_CHAT_PROVIDER` | `builtin` (rule-based) or `anthropic` (Claude via the official SDK) |
+| `YAVER_ANTHROPIC_API_KEY` | Required when `YAVER_CHAT_PROVIDER=anthropic` |
+| `YAVER_ANTHROPIC_MODEL` | Optional; defaults to `claude-opus-4-8` |
 | `YAVER_MSG_SENDER` | `log` (dev) or `meta` (WhatsApp/Messenger Graph API) |
 | `YAVER_EMAIL_SENDER` | `log` (dev) or `resend` |
 | `YAVER_EMAIL_FROM` | From address for transactional email |

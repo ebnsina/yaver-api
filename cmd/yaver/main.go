@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	anthropicchat "github.com/ebnsina/yaver-api/internal/adapter/chat/anthropic"
 	chatbuiltin "github.com/ebnsina/yaver-api/internal/adapter/chat/builtin"
 	emaillog "github.com/ebnsina/yaver-api/internal/adapter/email/logsender"
 	emailresend "github.com/ebnsina/yaver-api/internal/adapter/email/resend"
@@ -135,8 +136,10 @@ func main() {
 	switch cfg.ChatProvider {
 	case "builtin":
 		chatModel = chatbuiltin.New()
+	case "anthropic":
+		chatModel = anthropicchat.New(cfg.AnthropicKey, cfg.AnthropicModel)
 	default:
-		log.Error("unsupported YAVER_CHAT_PROVIDER (only 'builtin' is implemented)", "value", cfg.ChatProvider)
+		log.Error("unsupported YAVER_CHAT_PROVIDER (want 'builtin' or 'anthropic')", "value", cfg.ChatProvider)
 		os.Exit(1)
 	}
 	chatSvc := chat.New(postgres.NewChatRepo(pool), postgres.NewChatSettingsRepo(pool), chatModel, chatbuiltin.NewSummarizer(), postgres.NewInsightRepo(pool), activityBus)
